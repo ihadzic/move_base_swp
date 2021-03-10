@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(move_base)
+project(move_base_swp)
 
 find_package(catkin REQUIRED
     COMPONENTS
@@ -47,31 +47,31 @@ include_directories(
 )
 
 # move_base
-add_library(move_base
+add_library(move_base_swp
   src/move_base.cpp
 )
-target_link_libraries(move_base
+target_link_libraries(move_base_swp
     ${Boost_LIBRARIES}
     ${catkin_LIBRARIES}
     )
-add_dependencies(move_base ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_base_swp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(move_base_node
+add_executable(move_base_swp_node
   src/move_base_node.cpp
 )
-add_dependencies(move_base_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(move_base_node move_base)
-set_target_properties(move_base_node PROPERTIES OUTPUT_NAME move_base)
+add_dependencies(move_base_swp_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(move_base_swp_node move_base_swp)
+set_target_properties(move_base_swp_node PROPERTIES OUTPUT_NAME move_base_swp)
 
 install(
     TARGETS
-        move_base_node
+        move_base_swp_node
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 install(
     TARGETS
-        move_base
+        move_base_swp
     DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
