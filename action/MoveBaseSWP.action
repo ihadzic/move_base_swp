@@ -1,0 +1,4 @@
+geometry_msgs/PoseStamped[] waypoint_poses
+---
+---
+geometry_msgs/PoseStamped base_position
