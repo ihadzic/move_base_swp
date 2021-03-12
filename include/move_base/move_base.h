@@ -169,6 +169,7 @@ namespace move_base {
       void executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal);
 
       bool isQuaternionValid(const geometry_msgs::Quaternion& q);
+      bool validateWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal);
 
       bool getRobotPose(geometry_msgs::PoseStamped& global_pose, costmap_2d::Costmap2DROS* costmap);
 

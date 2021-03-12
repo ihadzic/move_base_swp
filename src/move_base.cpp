@@ -551,6 +551,17 @@ namespace move_base {
     return true;
   }
 
+  bool MoveBase::validateWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
+  {
+    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++)
+      if(!isQuaternionValid(g->pose.orientation)){
+        as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                        "SPW goal contains an invalid quaternion");
+        return false;
+      }
+    return true;
+  }
+
   geometry_msgs::PoseStamped MoveBase::goalToGlobalFrame(const geometry_msgs::PoseStamped& goal_pose_msg){
     std::string global_frame = planner_costmap_ros_->getGlobalFrameID();
     geometry_msgs::PoseStamped goal_pose, global_pose;
@@ -738,12 +749,8 @@ namespace move_base {
 
   void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
   {
-    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++)
-      if(!isQuaternionValid(g->pose.orientation)){
-        as_->setAborted(move_base_swp::MoveBaseSWPResult(),
-                        "SPW goal contains an invalid quaternion");
-        return;
-      }
+    if (!validateWaypoints(swp_goal))
+      return;
 
     // REVISIT: for now we only consider the last element in the goal
     //          this will need to be iterated over waypoints
@@ -785,19 +792,14 @@ namespace move_base {
 
       if(as_->isPreemptRequested()){
         if(as_->isNewGoalAvailable()){
-          //if we're active and a new goal is available,
+          // if we're active and a new goal is available,
           // we'll accept it, but we won't shut anything down
-          move_base_swp::MoveBaseSWPGoal new_swp_goal = *as_->acceptNewGoal();
-
-          for (auto g = new_swp_goal.waypoint_poses.begin(); g < new_swp_goal.waypoint_poses.end(); g++)
-            if(!isQuaternionValid(g->pose.orientation)){
-              as_->setAborted(move_base_swp::MoveBaseSWPResult(),
-                              "SPW goal contains an invalid quaternion");
-              return;
-            }
+          move_base_swp::MoveBaseSWPGoalConstPtr new_swp_goal = as_->acceptNewGoal();
+          if (!validateWaypoints(new_swp_goal))
+            return;
           // REVISIT: for now we only consider the last element in the goal
           //          this will need to be iterated over waypoints
-          geometry_msgs::PoseStamped goal = goalToGlobalFrame(new_swp_goal.waypoint_poses.back());
+          geometry_msgs::PoseStamped goal = goalToGlobalFrame(new_swp_goal->waypoint_poses.back());
 
           //we'll make sure that we reset our state for the next execution cycle
           recovery_index_ = 0;
