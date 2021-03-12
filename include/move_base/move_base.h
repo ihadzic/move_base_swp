@@ -45,6 +45,7 @@
 #include <actionlib/server/simple_action_server.h>
 #include <actionlib/client/simple_action_client.h>
 #include <move_base_msgs/MoveBaseAction.h>
+#include <move_base_swp/MoveBaseSWPAction.h>
 
 #include <nav_core/base_local_planner.h>
 #include <nav_core/base_global_planner.h>
@@ -64,7 +65,8 @@ namespace move_base {
   //typedefs to help us out with the action server and client so that we
   // don't have to type so much
   typedef actionlib::SimpleActionServer<move_base_msgs::MoveBaseAction> MoveBaseActionServer;
-  typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseActionClient;
+  typedef actionlib::SimpleActionServer<move_base_swp::MoveBaseSWPAction> MoveBaseSWPActionServer;
+  typedef actionlib::SimpleActionClient<move_base_swp::MoveBaseSWPAction> MoveBaseSWPActionClient;
 
   enum MoveBaseState {
     PLANNING,
@@ -163,7 +165,7 @@ namespace move_base {
 
       void planThread();
 
-      void executeCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal);
+      void executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal);
       void executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal);
 
       bool isQuaternionValid(const geometry_msgs::Quaternion& q);
@@ -181,8 +183,8 @@ namespace move_base {
 
       tf2_ros::Buffer& tf_;
 
-      MoveBaseActionServer* as_;
-      MoveBaseActionClient* ac_;
+      MoveBaseSWPActionServer* as_;
+      MoveBaseSWPActionClient* ac_;
       MoveBaseActionServer* as_legacy_;
 
       boost::shared_ptr<nav_core::BaseLocalPlanner> tc_;

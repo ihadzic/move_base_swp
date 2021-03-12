@@ -62,8 +62,8 @@ namespace move_base {
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
-    ac_ = new MoveBaseActionClient("move_base_swp", true);
-    as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base_swp",
+    ac_ = new MoveBaseSWPActionClient("move_base_swp", true);
+    as_ = new MoveBaseSWPActionServer(ros::NodeHandle(), "move_base_swp",
             boost::bind(&MoveBase::executeCb, this, _1), false);
     as_legacy_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base",
             boost::bind(&MoveBase::executeLegacyCb, this, _1), false);
@@ -676,7 +676,10 @@ namespace move_base {
       ROS_ERROR("Primary interface not responding, aborting");
       return;
     }
-    ac_->sendGoal(*move_base_goal);
+
+    move_base_swp::MoveBaseSWPGoal swp_goal;
+    swp_goal.waypoint_poses.push_back(move_base_goal->target_pose);
+    ac_->sendGoal(swp_goal);
     ros::NodeHandle n;
     while(n.ok()) {
       if(as_legacy_->isPreemptRequested()) {
@@ -690,7 +693,9 @@ namespace move_base {
                    new_goal->target_pose.pose.orientation.y,
                    new_goal->target_pose.pose.orientation.z,
                    new_goal->target_pose.pose.orientation.w);
-          ac_->sendGoal(*new_goal);
+          move_base_swp::MoveBaseSWPGoal swp_goal;
+          swp_goal.waypoint_poses.push_back(new_goal->target_pose);
+          ac_->sendGoal(swp_goal);
         } else {
           ROS_INFO("Preempted by cancel request on legacy interface");
           ac_->cancelGoal();
@@ -731,14 +736,18 @@ namespace move_base {
     }
   }
 
-  void MoveBase::executeCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal)
+  void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
   {
-    if(!isQuaternionValid(move_base_goal->target_pose.pose.orientation)){
-      as_->setAborted(move_base_msgs::MoveBaseResult(), "Aborting on goal because it was sent with an invalid quaternion");
-      return;
-    }
+    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++)
+      if(!isQuaternionValid(g->pose.orientation)){
+        as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                        "SPW goal contains an invalid quaternion");
+        return;
+      }
 
-    geometry_msgs::PoseStamped goal = goalToGlobalFrame(move_base_goal->target_pose);
+    // REVISIT: for now we only consider the last element in the goal
+    //          this will need to be iterated over waypoints
+    geometry_msgs::PoseStamped goal = goalToGlobalFrame(swp_goal->waypoint_poses.back());
 
     publishZeroVelocity();
     //we have a goal so start the planner
@@ -776,15 +785,19 @@ namespace move_base {
 
       if(as_->isPreemptRequested()){
         if(as_->isNewGoalAvailable()){
-          //if we're active and a new goal is available, we'll accept it, but we won't shut anything down
-          move_base_msgs::MoveBaseGoal new_goal = *as_->acceptNewGoal();
+          //if we're active and a new goal is available,
+          // we'll accept it, but we won't shut anything down
+          move_base_swp::MoveBaseSWPGoal new_swp_goal = *as_->acceptNewGoal();
 
-          if(!isQuaternionValid(new_goal.target_pose.pose.orientation)){
-            as_->setAborted(move_base_msgs::MoveBaseResult(), "Aborting on goal because it was sent with an invalid quaternion");
-            return;
-          }
-
-          goal = goalToGlobalFrame(new_goal.target_pose);
+          for (auto g = new_swp_goal.waypoint_poses.begin(); g < new_swp_goal.waypoint_poses.end(); g++)
+            if(!isQuaternionValid(g->pose.orientation)){
+              as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                              "SPW goal contains an invalid quaternion");
+              return;
+            }
+          // REVISIT: for now we only consider the last element in the goal
+          //          this will need to be iterated over waypoints
+          geometry_msgs::PoseStamped goal = goalToGlobalFrame(new_swp_goal.waypoint_poses.back());
 
           //we'll make sure that we reset our state for the next execution cycle
           recovery_index_ = 0;
@@ -874,7 +887,8 @@ namespace move_base {
     lock.unlock();
 
     //if the node is killed then we'll abort and return
-    as_->setAborted(move_base_msgs::MoveBaseResult(), "Aborting on the goal because the node has been killed");
+    as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                    "Aborting on the goal because the node has been killed");
     return;
   }
 
@@ -894,7 +908,7 @@ namespace move_base {
     const geometry_msgs::PoseStamped& current_position = global_pose;
 
     //push the feedback out
-    move_base_msgs::MoveBaseFeedback feedback;
+    move_base_swp::MoveBaseSWPFeedback feedback;
     feedback.base_position = current_position;
     as_->publishFeedback(feedback);
 
@@ -942,7 +956,8 @@ namespace move_base {
         runPlanner_ = false;
         lock.unlock();
 
-        as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to pass global plan to the controller.");
+        as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                        "Failed to pass global plan to the controller.");
         return true;
       }
 
@@ -977,7 +992,8 @@ namespace move_base {
           runPlanner_ = false;
           lock.unlock();
 
-          as_->setSucceeded(move_base_msgs::MoveBaseResult(), "Goal reached.");
+          as_->setSucceeded(move_base_swp::MoveBaseSWPResult(),
+                            "Goal reached.");
           return true;
         }
 
@@ -1071,15 +1087,15 @@ namespace move_base {
 
           if(recovery_trigger_ == CONTROLLING_R){
             ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
-            as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
+            as_->setAborted(move_base_swp::MoveBaseSWPResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
           }
           else if(recovery_trigger_ == PLANNING_R){
             ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
-            as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
+            as_->setAborted(move_base_swp::MoveBaseSWPResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
           }
           else if(recovery_trigger_ == OSCILLATION_R){
             ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
-            as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
+            as_->setAborted(move_base_swp::MoveBaseSWPResult(), "Robot is oscillating. Even after executing recovery behaviors.");
           }
           resetState();
           return true;
@@ -1092,7 +1108,7 @@ namespace move_base {
         boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
         runPlanner_ = false;
         lock.unlock();
-        as_->setAborted(move_base_msgs::MoveBaseResult(), "Reached a case that should not be hit in move_base. This is a bug, please report it.");
+        as_->setAborted(move_base_swp::MoveBaseSWPResult(), "Reached a case that should not be hit in move_base. This is a bug, please report it.");
         return true;
     }
 
