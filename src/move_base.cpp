@@ -673,9 +673,9 @@ namespace move_base {
     if (!ac_->waitForServer(ros::Duration(AC_TIMEOUT))) {
       as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
                              "Primary interface not responding");
+      ROS_ERROR("Primary interface not responding, aborting");
       return;
     }
-    ROS_INFO("Forwarding goal to primary interface");
     ac_->sendGoal(*move_base_goal);
     ros::NodeHandle n;
     while(n.ok()) {
@@ -683,15 +683,19 @@ namespace move_base {
       actionlib::SimpleClientGoalState state = ac_->getState();
       if (done && state.isDone()) {
         if (state == actionlib::SimpleClientGoalState::SUCCEEDED) {
+          ROS_INFO("Primary interface succeeded");
           as_legacy_->setSucceeded(move_base_msgs::MoveBaseResult(),
                                    state.getText());
         } else if (state == actionlib::SimpleClientGoalState::ABORTED) {
+          ROS_INFO("Primary interface aborted");
           as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
                                  state.getText());
         } else if (state == actionlib::SimpleClientGoalState::PREEMPTED) {
+          ROS_INFO("Primary interface preempted");
           as_legacy_->setPreempted(move_base_msgs::MoveBaseResult(),
                                    state.getText());
         } else {
+          ROS_WARN("Primary interface recall or reject treated as abort");
           // RECALLED and REJECTED will match this but the only thing
           // we can do is abort, because legacy interface has accepted
           // the goal before it new that primary interface would reject
