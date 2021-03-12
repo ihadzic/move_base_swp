@@ -679,6 +679,23 @@ namespace move_base {
     ac_->sendGoal(*move_base_goal);
     ros::NodeHandle n;
     while(n.ok()) {
+      if(as_legacy_->isPreemptRequested()) {
+        if(as_legacy_->isNewGoalAvailable()) {
+          move_base_msgs::MoveBaseGoalConstPtr new_goal = as_legacy_->acceptNewGoal();
+          ROS_INFO("Preempted by new goal on legacy interface: p=(%.2f, %.2f, %2f), q=(%2f, %2f, %2f, %2f)",
+                   new_goal->target_pose.pose.position.x,
+                   new_goal->target_pose.pose.position.y,
+                   new_goal->target_pose.pose.position.z,
+                   new_goal->target_pose.pose.orientation.x,
+                   new_goal->target_pose.pose.orientation.y,
+                   new_goal->target_pose.pose.orientation.z,
+                   new_goal->target_pose.pose.orientation.w);
+          ac_->sendGoal(*new_goal);
+        } else {
+          ROS_INFO("Preempted by cancel request on legacy interface");
+          ac_->cancelGoal();
+        }
+      }
       bool done = ac_->waitForResult(ros::Duration(1.0 / controller_frequency_));
       actionlib::SimpleClientGoalState state = ac_->getState();
       if (done && state.isDone()) {
