@@ -46,11 +46,15 @@
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#define AC_TIMEOUT .5
+
 namespace move_base {
 
   MoveBase::MoveBase(tf2_ros::Buffer& tf) :
     tf_(tf),
     as_(NULL),
+    as_legacy_(NULL),
+    ac_(NULL),
     planner_costmap_ros_(NULL), controller_costmap_ros_(NULL),
     bgp_loader_("nav_core", "nav_core::BaseGlobalPlanner"),
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"),
@@ -58,7 +62,11 @@ namespace move_base {
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
-    as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
+    ac_ = new MoveBaseActionClient("move_base_swp", true);
+    as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base_swp",
+            boost::bind(&MoveBase::executeCb, this, _1), false);
+    as_legacy_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base",
+            boost::bind(&MoveBase::executeLegacyCb, this, _1), false);
 
     ros::NodeHandle private_nh("~");
     ros::NodeHandle nh;
@@ -173,6 +181,7 @@ namespace move_base {
 
     //we're all set up now so we can start the action server
     as_->start();
+    as_legacy_->start();
 
     dsrv_ = new dynamic_reconfigure::Server<move_base::MoveBaseConfig>(ros::NodeHandle("~"));
     dynamic_reconfigure::Server<move_base::MoveBaseConfig>::CallbackType cb = boost::bind(&MoveBase::reconfigureCB, this, _1, _2);
@@ -452,6 +461,9 @@ namespace move_base {
     if(as_ != NULL)
       delete as_;
 
+    if(as_legacy_ != NULL)
+      delete as_legacy_;
+
     if(planner_costmap_ros_ != NULL)
       delete planner_costmap_ros_;
 
@@ -645,6 +657,56 @@ namespace move_base {
           timer = n.createTimer(sleep_time, &MoveBase::wakePlanner, this);
         }
       }
+    }
+  }
+
+  void MoveBase::executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal)
+  {
+    ROS_INFO("Got goal on legacy interface: p=(%.2f, %.2f, %2f), q=(%2f, %2f, %2f, %2f)",
+             move_base_goal->target_pose.pose.position.x,
+             move_base_goal->target_pose.pose.position.y,
+             move_base_goal->target_pose.pose.position.z,
+             move_base_goal->target_pose.pose.orientation.x,
+             move_base_goal->target_pose.pose.orientation.y,
+             move_base_goal->target_pose.pose.orientation.z,
+             move_base_goal->target_pose.pose.orientation.w);
+    if (!ac_->waitForServer(ros::Duration(AC_TIMEOUT))) {
+      as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
+                             "Primary interface not responding");
+      return;
+    }
+    ROS_INFO("Forwarding goal to primary interface");
+    ac_->sendGoal(*move_base_goal);
+    ros::NodeHandle n;
+    while(n.ok()) {
+      bool done = ac_->waitForResult(ros::Duration(1.0 / controller_frequency_));
+      actionlib::SimpleClientGoalState state = ac_->getState();
+      if (done && state.isDone()) {
+        if (state == actionlib::SimpleClientGoalState::SUCCEEDED) {
+          as_legacy_->setSucceeded(move_base_msgs::MoveBaseResult(),
+                                   state.getText());
+        } else if (state == actionlib::SimpleClientGoalState::ABORTED) {
+          as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
+                                 state.getText());
+        } else if (state == actionlib::SimpleClientGoalState::PREEMPTED) {
+          as_legacy_->setPreempted(move_base_msgs::MoveBaseResult(),
+                                   state.getText());
+        } else {
+          // RECALLED and REJECTED will match this but the only thing
+          // we can do is abort, because legacy interface has accepted
+          // the goal before it new that primary interface would reject
+          // or recall it
+          as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
+                                 state.toString() + ':' + state.getText());
+        }
+        return;
+      }
+      geometry_msgs::PoseStamped global_pose;
+      getRobotPose(global_pose, planner_costmap_ros_);
+      const geometry_msgs::PoseStamped& current_position = global_pose;
+      move_base_msgs::MoveBaseFeedback feedback;
+      feedback.base_position = current_position;
+      as_legacy_->publishFeedback(feedback);
     }
   }
 
