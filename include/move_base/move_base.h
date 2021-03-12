@@ -165,6 +165,7 @@ namespace move_base {
 
       void planThread();
 
+      void logPose(const char *msg, const geometry_msgs::PoseStamped& p);
       void executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal);
       void executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal);
 

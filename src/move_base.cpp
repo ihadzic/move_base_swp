@@ -671,16 +671,18 @@ namespace move_base {
     }
   }
 
+  void MoveBase::logPose(const char *msg, const geometry_msgs::PoseStamped& p)
+  {
+
+    ROS_INFO("%s: p=(%.2f, %.2f, %2f), q=(%2f, %2f, %2f, %2f)", msg,
+             p.pose.position.x, p.pose.position.y, p.pose.position.z,
+             p.pose.orientation.x, p.pose.orientation.y,
+             p.pose.orientation.z, p.pose.orientation.w);
+  }
+
   void MoveBase::executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal)
   {
-    ROS_INFO("Got goal on legacy interface: p=(%.2f, %.2f, %2f), q=(%2f, %2f, %2f, %2f)",
-             move_base_goal->target_pose.pose.position.x,
-             move_base_goal->target_pose.pose.position.y,
-             move_base_goal->target_pose.pose.position.z,
-             move_base_goal->target_pose.pose.orientation.x,
-             move_base_goal->target_pose.pose.orientation.y,
-             move_base_goal->target_pose.pose.orientation.z,
-             move_base_goal->target_pose.pose.orientation.w);
+    logPose("Got goal on legacy interface", move_base_goal->target_pose);
     if (!ac_->waitForServer(ros::Duration(AC_TIMEOUT))) {
       as_legacy_->setAborted(move_base_msgs::MoveBaseResult(),
                              "Primary interface not responding");
@@ -696,14 +698,7 @@ namespace move_base {
       if(as_legacy_->isPreemptRequested()) {
         if(as_legacy_->isNewGoalAvailable()) {
           move_base_msgs::MoveBaseGoalConstPtr new_goal = as_legacy_->acceptNewGoal();
-          ROS_INFO("Preempted by new goal on legacy interface: p=(%.2f, %.2f, %2f), q=(%2f, %2f, %2f, %2f)",
-                   new_goal->target_pose.pose.position.x,
-                   new_goal->target_pose.pose.position.y,
-                   new_goal->target_pose.pose.position.z,
-                   new_goal->target_pose.pose.orientation.x,
-                   new_goal->target_pose.pose.orientation.y,
-                   new_goal->target_pose.pose.orientation.z,
-                   new_goal->target_pose.pose.orientation.w);
+          logPose("Preempted by new goal on legacy interface", new_goal->target_pose);
           move_base_swp::MoveBaseSWPGoal swp_goal;
           swp_goal.waypoint_poses.push_back(new_goal->target_pose);
           ac_->sendGoal(swp_goal);
