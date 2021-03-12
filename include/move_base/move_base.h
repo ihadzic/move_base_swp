@@ -58,7 +58,7 @@
 #include <std_srvs/Empty.h>
 
 #include <dynamic_reconfigure/server.h>
-#include "move_base/MoveBaseConfig.h"
+#include "move_base_swp/MoveBaseConfig.h"
 
 namespace move_base {
   //typedefs to help us out with the action server and client so that we
