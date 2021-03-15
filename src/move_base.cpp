@@ -606,14 +606,33 @@ namespace move_base {
       ros::Time start_time = ros::Time::now();
 
       //time to plan! get a copy of the goal and unlock the mutex
-      geometry_msgs::PoseStamped temp_goal = planner_goal_;
+      std::vector<geometry_msgs::PoseStamped> temp_waypoints = planner_waypoints_;
       lock.unlock();
-      ROS_DEBUG_NAMED("move_base_plan_thread","Planning...");
 
-      //run planner
+      //run planner for each waypoint
       planner_plan_->clear();
-      bool gotPlan = n.ok() && makePlan(temp_goal, *planner_plan_);
-
+      bool gotPlan = false;
+      if (n.ok()) {
+        for (auto w = temp_waypoints.begin(); w < temp_waypoints.end(); w++) {
+          std::vector<geometry_msgs::PoseStamped> temp_plan;
+          temp_plan.clear();
+          if (w == temp_waypoints.begin()) {
+            logPose("planning to first waypoint", *w);
+            gotPlan = makePlan(*w, temp_plan);
+          } else {
+            logPose("planning to waypoint", *w);
+            gotPlan = planner_->makePlan(*(w-1), *w, temp_plan);
+          }
+          if (gotPlan) {
+            ROS_INFO("planning succeeded!");
+            planner_plan_->insert(planner_plan_->end(), temp_plan.begin(), temp_plan.end());
+          } else {
+            ROS_WARN("plan failed");
+            planner_plan_->clear();
+            break;
+          }
+        }
+      }
       if(gotPlan){
         ROS_DEBUG_NAMED("move_base_plan_thread","Got Plan with %zu points!", planner_plan_->size());
         //pointer swap the plans under mutex (the controller will pull from latest_plan_)
@@ -747,19 +766,22 @@ namespace move_base {
     if (!validateWaypoints(swp_goal))
       return;
 
-    // REVISIT: for now we only consider the last element in the goal
-    //          this will need to be iterated over waypoints
-    geometry_msgs::PoseStamped goal = goalToGlobalFrame(swp_goal->waypoint_poses.back());
-
     publishZeroVelocity();
+    std::vector<geometry_msgs::PoseStamped> waypoints;
+    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++) {
+      logPose("Got waypoint on primary interface", *g);
+      waypoints.push_back(goalToGlobalFrame(*g));
+    }
+
     //we have a goal so start the planner
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
-    planner_goal_ = goal;
+    planner_waypoints_=waypoints;
     runPlanner_ = true;
     planner_cond_.notify_one();
     lock.unlock();
 
-    current_goal_pub_.publish(goal);
+    // FIXME: publish waypoints instead of the goal
+    // current_goal_pub_.publish(goal);
     std::vector<geometry_msgs::PoseStamped> global_plan;
 
     ros::Rate r(controller_frequency_);
@@ -792,9 +814,9 @@ namespace move_base {
           move_base_swp::MoveBaseSWPGoalConstPtr new_swp_goal = as_->acceptNewGoal();
           if (!validateWaypoints(new_swp_goal))
             return;
-          // REVISIT: for now we only consider the last element in the goal
-          //          this will need to be iterated over waypoints
-          geometry_msgs::PoseStamped goal = goalToGlobalFrame(new_swp_goal->waypoint_poses.back());
+          std::vector<geometry_msgs::PoseStamped> waypoints;
+          for (auto g = new_swp_goal->waypoint_poses.begin(); g < new_swp_goal->waypoint_poses.end(); g++)
+            waypoints.push_back(goalToGlobalFrame(*g));
 
           //we'll make sure that we reset our state for the next execution cycle
           recovery_index_ = 0;
@@ -802,14 +824,16 @@ namespace move_base {
 
           //we have a new goal so make sure the planner is awake
           lock.lock();
-          planner_goal_ = goal;
+          planner_waypoints_ = waypoints;
           runPlanner_ = true;
           planner_cond_.notify_one();
           lock.unlock();
 
           //publish the goal point to the visualizer
-          ROS_DEBUG_NAMED("move_base","move_base has received a goal of x: %.2f, y: %.2f", goal.pose.position.x, goal.pose.position.y);
-          current_goal_pub_.publish(goal);
+          // FIXME: decide what to do with this log message
+          //ROS_DEBUG_NAMED("move_base","move_base has received a goal of x: %.2f, y: %.2f", goal.pose.position.x, goal.pose.position.y);
+          // FIXME: publish waypoints instead of the goal
+          //current_goal_pub_.publish(goal);
 
           //make sure to reset our timeouts and counters
           last_valid_control_ = ros::Time::now();
@@ -831,23 +855,30 @@ namespace move_base {
       }
 
       //we also want to check if we've changed global frames because we need to transform our goal pose
-      if(goal.header.frame_id != planner_costmap_ros_->getGlobalFrameID()){
-        goal = goalToGlobalFrame(goal);
-
+      bool global_frame_changed = false;
+      for (auto g = waypoints.begin(); g < waypoints.end(); g++) {
+        if(g->header.frame_id != planner_costmap_ros_->getGlobalFrameID()) {
+          *g = goalToGlobalFrame(*g);
+          global_frame_changed = true;
+        }
+      }
+      if (global_frame_changed) {
         //we want to go back to the planning state for the next execution cycle
         recovery_index_ = 0;
         state_ = PLANNING;
 
         //we have a new goal so make sure the planner is awake
         lock.lock();
-        planner_goal_ = goal;
+        planner_waypoints_ = waypoints;
         runPlanner_ = true;
         planner_cond_.notify_one();
         lock.unlock();
 
         //publish the goal point to the visualizer
-        ROS_DEBUG_NAMED("move_base","The global frame for move_base has changed, new frame: %s, new goal position x: %.2f, y: %.2f", goal.header.frame_id.c_str(), goal.pose.position.x, goal.pose.position.y);
-        current_goal_pub_.publish(goal);
+        // FIXME: decide what to do with this log message
+        // ROS_DEBUG_NAMED("move_base","The global frame for move_base has changed, new frame: %s, new goal position x: %.2f, y: %.2f", goal.header.frame_id.c_str(), goal.pose.position.x, goal.pose.position.y);
+        // FIXME: publish waypoints, not goal
+        // current_goal_pub_.publish(goal);
 
         //make sure to reset our timeouts and counters
         last_valid_control_ = ros::Time::now();
@@ -860,7 +891,7 @@ namespace move_base {
       ros::WallTime start = ros::WallTime::now();
 
       //the real work on pursuing a goal is done here
-      bool done = executeCycle(goal, global_plan);
+      bool done = executeCycle(waypoints, global_plan);
 
       //if we're done, then we'll return from execute
       if(done)
@@ -894,7 +925,7 @@ namespace move_base {
     return hypot(p1.pose.position.x - p2.pose.position.x, p1.pose.position.y - p2.pose.position.y);
   }
 
-  bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& global_plan){
+  bool MoveBase::executeCycle(std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<geometry_msgs::PoseStamped>& global_plan){
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
     geometry_msgs::Twist cmd_vel;

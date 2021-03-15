@@ -105,7 +105,7 @@ namespace move_base {
        * @param global_plan A reference to the global plan being used
        * @return True if processing of the goal is done, false otherwise
        */
-      bool executeCycle(geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& global_plan);
+      bool executeCycle(std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<geometry_msgs::PoseStamped>& global_plan);
 
     private:
       /**
@@ -230,7 +230,7 @@ namespace move_base {
       bool runPlanner_;
       boost::recursive_mutex planner_mutex_;
       boost::condition_variable_any planner_cond_;
-      geometry_msgs::PoseStamped planner_goal_;
+      std::vector<geometry_msgs::PoseStamped> planner_waypoints_;
       boost::thread* planner_thread_;
 
 
