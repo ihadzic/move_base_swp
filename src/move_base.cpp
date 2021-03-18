@@ -518,11 +518,11 @@ namespace move_base {
   }
 
   void MoveBase::publishZeroVelocity(){
-    geometry_msgs::Twist cmd_vel;
-    cmd_vel.linear.x = 0.0;
-    cmd_vel.linear.y = 0.0;
-    cmd_vel.angular.z = 0.0;
-    vel_pub_.publish(cmd_vel);
+    current_cmd_vel_.linear.x = 0.0;
+    current_cmd_vel_.linear.y = 0.0;
+    current_cmd_vel_.angular.z = 0.0;
+    vel_pub_.publish(current_cmd_vel_);
+
   }
 
   bool MoveBase::isQuaternionValid(const geometry_msgs::Quaternion& q){
@@ -1047,6 +1047,7 @@ namespace move_base {
           last_valid_control_ = ros::Time::now();
           //make sure that we send the velocity command to the base
           vel_pub_.publish(cmd_vel);
+          current_cmd_vel_ = cmd_vel;
           if(recovery_trigger_ == CONTROLLING_R)
             recovery_index_ = 0;
         }
