@@ -99,15 +99,13 @@ namespace move_base {
        */
       virtual ~MoveBase();
 
+    private:
       /**
        * @brief  Performs a control cycle
-       * @param goal A reference to the goal to pursue
-       * @param global_plan A reference to the global plan being used
        * @return True if processing of the goal is done, false otherwise
        */
-      bool executeCycle(std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<geometry_msgs::PoseStamped>& global_plan);
+      bool executeCycle();
 
-    private:
       /**
        * @brief  A service call that clears the costmaps of obstacles
        * @param req The service request
