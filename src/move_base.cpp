@@ -124,6 +124,8 @@ namespace move_base {
     private_nh.param("clearing_rotation_allowed", clearing_rotation_allowed_, true);
     private_nh.param("recovery_behavior_enabled", recovery_behavior_enabled_, true);
 
+    private_nh.param("brake_slope", brake_slope_, 0.5);
+
     //create the ros wrapper for the planner's costmap... and initializer a pointer we'll use with the underlying map
     planner_costmap_ros_ = new costmap_2d::Costmap2DROS("global_costmap", tf_);
     planner_costmap_ros_->pause();
@@ -227,6 +229,8 @@ namespace move_base {
     recovery_behavior_enabled_ = config.recovery_behavior_enabled;
     clearing_rotation_allowed_ = config.clearing_rotation_allowed;
     shutdown_costmaps_ = config.shutdown_costmaps;
+
+    brake_slope_ = config.brake_slope;
 
     oscillation_timeout_ = config.oscillation_timeout;
     oscillation_distance_ = config.oscillation_distance;
