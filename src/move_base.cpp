@@ -565,14 +565,18 @@ namespace move_base {
     return true;
   }
 
-  bool MoveBase::validateWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
+  bool MoveBase::loadWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal, std::vector<geometry_msgs::PoseStamped>& waypoints)
   {
-    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++)
-      if(!isQuaternionValid(g->pose.orientation)){
+    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++) {
+      if(!isQuaternionValid(g->pose.orientation)) {
         as_->setAborted(move_base_swp::MoveBaseSWPResult(),
-                        "SPW goal contains an invalid quaternion");
+                        "SWP goal contains an invalid quaternion");
         return false;
       }
+      logPose("loading waypoint", *g);
+      waypoints.push_back(goalToGlobalFrame(*g));
+    }
+    current_goal_pub_.publish(waypoints.back());
     return true;
   }
 
@@ -838,26 +842,30 @@ namespace move_base {
     brake_ = false;
   }
 
-  void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
+  void MoveBase::startPlanner(const std::vector<geometry_msgs::PoseStamped>& waypoints)
   {
-    if (!validateWaypoints(swp_goal))
-      return;
-
-    applyBrakes();
-    std::vector<geometry_msgs::PoseStamped> waypoints;
-    for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++) {
-      logPose("Got waypoint on primary interface", *g);
-      waypoints.push_back(goalToGlobalFrame(*g));
-    }
-
-    //we have a goal so start the planner
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
-    planner_waypoints_=waypoints;
+    planner_waypoints_= waypoints;
     runPlanner_ = true;
     planner_cond_.notify_one();
-    lock.unlock();
+  }
 
-    current_goal_pub_.publish(waypoints.back());
+  void MoveBase::startPlanner()
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    runPlanner_ = true;
+    planner_cond_.notify_one();
+  }
+
+  void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
+  {
+    ROS_INFO("Got goal on primary interface");
+    std::vector<geometry_msgs::PoseStamped> waypoints;
+    if (!loadWaypoints(swp_goal, waypoints))
+      return;
+    applyBrakes();
+    startPlanner(waypoints);
+
     std::vector<geometry_msgs::PoseStamped> global_plan;
 
     ros::Rate r(controller_frequency_);
@@ -887,28 +895,18 @@ namespace move_base {
         if(as_->isNewGoalAvailable()){
           // if we're active and a new goal is available,
           // we'll accept it, but we won't shut anything down
+          ROS_INFO("Preempted by the new goal on primary interface");
           move_base_swp::MoveBaseSWPGoalConstPtr new_swp_goal = as_->acceptNewGoal();
-          if (!validateWaypoints(new_swp_goal))
-            return;
           std::vector<geometry_msgs::PoseStamped> waypoints;
-          for (auto g = new_swp_goal->waypoint_poses.begin(); g < new_swp_goal->waypoint_poses.end(); g++)
-            waypoints.push_back(goalToGlobalFrame(*g));
+          if (!loadWaypoints(new_swp_goal, waypoints))
+            return;
 
           //we'll make sure that we reset our state for the next execution cycle
           recovery_index_ = 0;
           state_ = PLANNING;
 
           //we have a new goal so make sure the planner is awake
-          lock.lock();
-          planner_waypoints_ = waypoints;
-          runPlanner_ = true;
-          planner_cond_.notify_one();
-          lock.unlock();
-
-          //publish the goal point to the visualizer
-          // FIXME: decide what to do with this log message
-          //ROS_DEBUG_NAMED("move_base","move_base has received a goal of x: %.2f, y: %.2f", goal.pose.position.x, goal.pose.position.y);
-          current_goal_pub_.publish(waypoints.back());
+          startPlanner(waypoints);
 
           //make sure to reset our timeouts and counters
           last_valid_control_ = ros::Time::now();
@@ -933,6 +931,7 @@ namespace move_base {
       bool global_frame_changed = false;
       for (auto g = waypoints.begin(); g < waypoints.end(); g++) {
         if(g->header.frame_id != planner_costmap_ros_->getGlobalFrameID()) {
+          logPose("global frame changed for waypoint", *g);
           *g = goalToGlobalFrame(*g);
           global_frame_changed = true;
         }
@@ -941,17 +940,7 @@ namespace move_base {
         //we want to go back to the planning state for the next execution cycle
         recovery_index_ = 0;
         state_ = PLANNING;
-
-        //we have a new goal so make sure the planner is awake
-        lock.lock();
-        planner_waypoints_ = waypoints;
-        runPlanner_ = true;
-        planner_cond_.notify_one();
-        lock.unlock();
-
-        //publish the goal point to the visualizer
-        // FIXME: decide what to do with this log message
-        // ROS_DEBUG_NAMED("move_base","The global frame for move_base has changed, new frame: %s, new goal position x: %.2f, y: %.2f", goal.header.frame_id.c_str(), goal.pose.position.x, goal.pose.position.y);
+        startPlanner(waypoints);
         current_goal_pub_.publish(waypoints.back());
 
         //make sure to reset our timeouts and counters
@@ -983,10 +972,7 @@ namespace move_base {
     }
 
     //wake up the planner thread so that it can exit cleanly
-    lock.lock();
-    runPlanner_ = true;
-    planner_cond_.notify_one();
-    lock.unlock();
+    startPlanner();
 
     //if the node is killed then we'll abort and return
     as_->setAborted(move_base_swp::MoveBaseSWPResult(),

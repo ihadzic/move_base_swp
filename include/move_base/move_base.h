@@ -184,7 +184,7 @@ namespace move_base {
       void executeLegacyCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal);
 
       bool isQuaternionValid(const geometry_msgs::Quaternion& q);
-      bool validateWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal);
+      bool loadWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal, std::vector<geometry_msgs::PoseStamped>& waypoints);
 
       bool getRobotPose(geometry_msgs::PoseStamped& global_pose, costmap_2d::Costmap2DROS* costmap);
 
@@ -196,6 +196,16 @@ namespace move_base {
        * @brief This is used to wake the planner at periodic intervals.
        */
       void wakePlanner(const ros::TimerEvent& event);
+
+      /**
+       * @brief  Give waypoints to the planner and start it up
+       * @param Reference to waypoints to load
+       */
+      void startPlanner(const std::vector<geometry_msgs::PoseStamped>& waypoints);
+      /**
+       * @brief  A startPlanner variant when waypoints are already loaded
+       */
+      void startPlanner();
 
       tf2_ros::Buffer& tf_;
 
