@@ -51,6 +51,8 @@
 #include <nav_core/base_global_planner.h>
 #include <nav_core/recovery_behavior.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/Pose.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d.h>
 #include <nav_msgs/GetPlan.h>
@@ -185,6 +187,7 @@ namespace move_base {
 
       bool isQuaternionValid(const geometry_msgs::Quaternion& q);
       bool loadWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal, std::vector<geometry_msgs::PoseStamped>& waypoints);
+      void publishWaypoints(const std::vector<geometry_msgs::PoseStamped>& waypoints);
 
       bool getRobotPose(geometry_msgs::PoseStamped& global_pose, costmap_2d::Costmap2DROS* costmap);
 
@@ -230,7 +233,7 @@ namespace move_base {
       uint32_t planning_retries_;
       double conservative_reset_dist_, clearing_radius_;
       double brake_slope_;
-      ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_;
+      ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_;
       ros::Subscriber goal_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;

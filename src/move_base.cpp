@@ -110,6 +110,7 @@ namespace move_base {
     //for commanding the base
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
+    current_waypoints_pub_ = private_nh.advertise<geometry_msgs::PoseArray>("current_waypoints", 0);
 
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
@@ -565,6 +566,16 @@ namespace move_base {
     return true;
   }
 
+  void MoveBase::publishWaypoints(const std::vector<geometry_msgs::PoseStamped>& waypoints)
+  {
+    geometry_msgs::PoseArray w;
+    for (auto p = waypoints.begin(); p < waypoints.end(); p++)
+      w.poses.push_back(p->pose);
+    w.header.stamp = ros::Time::now();
+    w.header.frame_id = planner_costmap_ros_->getGlobalFrameID();
+    current_waypoints_pub_.publish(w);
+  }
+
   bool MoveBase::loadWaypoints(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal, std::vector<geometry_msgs::PoseStamped>& waypoints)
   {
     for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++) {
@@ -577,6 +588,7 @@ namespace move_base {
       waypoints.push_back(goalToGlobalFrame(*g));
     }
     current_goal_pub_.publish(waypoints.back());
+    publishWaypoints(waypoints);
     return true;
   }
 
@@ -942,6 +954,7 @@ namespace move_base {
         state_ = PLANNING;
         startPlanner(waypoints);
         current_goal_pub_.publish(waypoints.back());
+        publishWaypoints(waypoints);
 
         //make sure to reset our timeouts and counters
         last_valid_control_ = ros::Time::now();
