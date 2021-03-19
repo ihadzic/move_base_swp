@@ -718,6 +718,7 @@ namespace move_base {
 
     while(n.ok()) {
       if (!brake_) {
+        ROS_DEBUG_NAMED("move_base", "brake thread going to sleep");
         brake_cond_.wait(lock);
       } else {
         if (rampDownVelocity(current_vx_, current_vy_, current_omegaz_))
@@ -728,6 +729,8 @@ namespace move_base {
         cmd_vel.angular.x = 0.0;
         cmd_vel.angular.y = 0.0;
         cmd_vel.angular.z = current_omegaz_;
+        ROS_DEBUG_NAMED("move_base",  "brakes active vx=%.2f, vy=%.2f, omega=%.2f",
+                        current_vx_, current_vy_, current_omegaz_);
         vel_pub_.publish(cmd_vel);
         lock.unlock();
         r.sleep();
