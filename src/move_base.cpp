@@ -533,7 +533,6 @@ namespace move_base {
     boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
     brake_ = true;
     brake_cond_.notify_one();
-    lock.unlock();
   }
 
   bool MoveBase::isQuaternionValid(const geometry_msgs::Quaternion& q){
@@ -837,7 +836,6 @@ namespace move_base {
     current_vy_ = cmd_vel.linear.y;
     current_omegaz_ = cmd_vel.angular.y;
     brake_ = false;
-    lock.unlock();
   }
 
   void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
