@@ -150,9 +150,24 @@ namespace move_base {
       void clearCostmapWindows(double size_x, double size_y);
 
       /**
-       * @brief  Publishes a velocity command of zero to the base
+       * @brief  Brakes the robot
        */
-      void publishZeroVelocity();
+      void applyBrakes();
+
+      /**
+       * @brief  Publishes and records the robot velocity on cmd_vel
+       * @param cmd_vel Requested velocity vector
+       **/
+      void setVelocity(const geometry_msgs::Twist& cmd_vel);
+
+      /**
+       * @brief  Ramps velocity down while keeping the same turn radius
+       * @param vx Reference to linear velocity (x component)
+       * @param vy Reference to linear velocity (y component)
+       * @param vy Reference to angular velocity (y component)
+       * @return True if the service call succeeds, false otherwise
+       */
+      bool rampDownVelocity(double& vx, double& vy, double& omegaz);
 
       /**
        * @brief  Reset the state of the move_base action and send a zero velocity command to the base
@@ -162,6 +177,7 @@ namespace move_base {
       void goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal);
 
       void planThread();
+      void brakeThread();
 
       void logPose(const char *msg, const geometry_msgs::PoseStamped& p);
       void executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal);
@@ -214,7 +230,6 @@ namespace move_base {
       MoveBaseState state_;
       RecoveryTrigger recovery_trigger_;
 
-      geometry_msgs::Twist current_cmd_vel_;
       ros::Time last_valid_plan_, last_valid_control_, last_oscillation_reset_;
       geometry_msgs::PoseStamped oscillation_pose_;
       pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> bgp_loader_;
@@ -233,6 +248,12 @@ namespace move_base {
       std::vector<geometry_msgs::PoseStamped> planner_waypoints_;
       boost::thread* planner_thread_;
 
+      // brake control
+      boost::recursive_mutex brake_mutex_;
+      boost::condition_variable_any brake_cond_;
+      bool brake_;
+      double current_vx_, current_vy_, current_omegaz_;
+      boost::thread* brake_thread_;
 
       boost::recursive_mutex configuration_mutex_;
       dynamic_reconfigure::Server<move_base::MoveBaseConfig> *dsrv_;

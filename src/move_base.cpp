@@ -55,6 +55,10 @@ namespace move_base {
     as_(NULL),
     as_legacy_(NULL),
     ac_(NULL),
+    current_vx_(0.0),
+    current_vy_(0.0),
+    current_omegaz_(0.0),
+    brake_(false),
     planner_costmap_ros_(NULL), controller_costmap_ros_(NULL),
     bgp_loader_("nav_core", "nav_core::BaseGlobalPlanner"),
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"),
@@ -99,6 +103,7 @@ namespace move_base {
 
     //set up the planner's thread
     planner_thread_ = new boost::thread(boost::bind(&MoveBase::planThread, this));
+    brake_thread_ = new boost::thread(boost::bind(&MoveBase::brakeThread, this));
 
     //for commanding the base
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
@@ -517,12 +522,12 @@ namespace move_base {
     return true;
   }
 
-  void MoveBase::publishZeroVelocity(){
-    current_cmd_vel_.linear.x = 0.0;
-    current_cmd_vel_.linear.y = 0.0;
-    current_cmd_vel_.angular.z = 0.0;
-    vel_pub_.publish(current_cmd_vel_);
-
+  void MoveBase::applyBrakes()
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
+    brake_ = true;
+    brake_cond_.notify_one();
+    lock.unlock();
   }
 
   bool MoveBase::isQuaternionValid(const geometry_msgs::Quaternion& q){
@@ -673,7 +678,7 @@ namespace move_base {
           //we'll move into our obstacle clearing mode
           state_ = CLEARING;
           runPlanner_ = false;  // proper solution for issue #523
-          publishZeroVelocity();
+          applyBrakes();
           recovery_trigger_ = PLANNING_R;
         }
 
@@ -690,6 +695,43 @@ namespace move_base {
           wait_for_wake = true;
           timer = n.createTimer(sleep_time, &MoveBase::wakePlanner, this);
         }
+      }
+    }
+  }
+
+  bool MoveBase::rampDownVelocity(double& vx, double& vy, double& omegaz)
+  {
+    // TODO: implement the rampdown
+    vx = 0.0;
+    vy = 0.0;
+    omegaz = 0.0;
+    return true;
+  }
+
+  void MoveBase::brakeThread()
+  {
+    ros::NodeHandle n;
+    boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
+    geometry_msgs::Twist cmd_vel;
+    // TODO: dehardcode this (and fix parameters race condition)
+    ros::Rate r(20.0);
+
+    while(n.ok()) {
+      if (!brake_) {
+        brake_cond_.wait(lock);
+      } else {
+        if (rampDownVelocity(current_vx_, current_vy_, current_omegaz_))
+          brake_ = false;
+        cmd_vel.linear.x = current_vx_;
+        cmd_vel.linear.y = current_vy_;
+        cmd_vel.linear.z = 0.0;
+        cmd_vel.angular.x = 0.0;
+        cmd_vel.angular.y = 0.0;
+        cmd_vel.angular.z = current_omegaz_;
+        vel_pub_.publish(cmd_vel);
+        lock.unlock();
+        r.sleep();
+        lock.lock();
       }
     }
   }
@@ -765,12 +807,23 @@ namespace move_base {
     }
   }
 
+  void MoveBase::setVelocity(const geometry_msgs::Twist& cmd_vel)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
+    vel_pub_.publish(cmd_vel);
+    current_vx_ = cmd_vel.linear.x;
+    current_vy_ = cmd_vel.linear.y;
+    current_omegaz_ = cmd_vel.angular.y;
+    brake_ = false;
+    lock.unlock();
+  }
+
   void MoveBase::executeCb(const move_base_swp::MoveBaseSWPGoalConstPtr& swp_goal)
   {
     if (!validateWaypoints(swp_goal))
       return;
 
-    publishZeroVelocity();
+    applyBrakes();
     std::vector<geometry_msgs::PoseStamped> waypoints;
     for (auto g = swp_goal->waypoint_poses.begin(); g < swp_goal->waypoint_poses.end(); g++) {
       logPose("Got waypoint on primary interface", *g);
@@ -958,7 +1011,7 @@ namespace move_base {
     //check that the observation buffers for the costmap are current, we don't want to drive blind
     if(!controller_costmap_ros_->isCurrent()){
       ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding of the base for safety",ros::this_node::getName().c_str());
-      publishZeroVelocity();
+      applyBrakes();
       return false;
     }
 
@@ -1033,7 +1086,7 @@ namespace move_base {
         if(oscillation_timeout_ > 0.0 &&
             last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now())
         {
-          publishZeroVelocity();
+          applyBrakes();
           state_ = CLEARING;
           recovery_trigger_ = OSCILLATION_R;
         }
@@ -1046,8 +1099,7 @@ namespace move_base {
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
           //make sure that we send the velocity command to the base
-          vel_pub_.publish(cmd_vel);
-          current_cmd_vel_ = cmd_vel;
+          setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
             recovery_index_ = 0;
         }
@@ -1058,7 +1110,7 @@ namespace move_base {
           //check if we've tried to find a valid control for longer than our time limit
           if(ros::Time::now() > attempt_end){
             //we'll move into our obstacle clearing mode
-            publishZeroVelocity();
+            applyBrakes();
             state_ = CLEARING;
             recovery_trigger_ = CONTROLLING_R;
           }
@@ -1067,7 +1119,7 @@ namespace move_base {
             last_valid_plan_ = ros::Time::now();
             planning_retries_ = 0;
             state_ = PLANNING;
-            publishZeroVelocity();
+            applyBrakes();
 
             //enable the planner thread in case it isn't running on a clock
             boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
@@ -1286,7 +1338,7 @@ namespace move_base {
     state_ = PLANNING;
     recovery_index_ = 0;
     recovery_trigger_ = PLANNING_R;
-    publishZeroVelocity();
+    applyBrakes();
 
     //if we shutdown our costmaps when we're deactivated... we'll do that now
     if(shutdown_costmaps_){
