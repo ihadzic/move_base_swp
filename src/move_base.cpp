@@ -47,6 +47,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #define AC_TIMEOUT .5
+#define BRAKE_SAMPLE_RATE 20.0
+#define EPSILON 0.01
 
 namespace move_base {
 
@@ -482,7 +484,11 @@ namespace move_base {
     planner_thread_->interrupt();
     planner_thread_->join();
 
+    brake_thread_->interrupt();
+    brake_thread_->join();
+
     delete planner_thread_;
+    delete brake_thread_;
 
     delete planner_plan_;
     delete latest_plan_;
@@ -701,11 +707,24 @@ namespace move_base {
 
   bool MoveBase::rampDownVelocity(double& vx, double& vy, double& omegaz)
   {
-    // TODO: implement the rampdown
-    vx = 0.0;
-    vy = 0.0;
-    omegaz = 0.0;
-    return true;
+    double v = hypot(vx, vy);
+    // TODO: dehardcode brake sample rate
+    double new_v = v - brake_slope_ / BRAKE_SAMPLE_RATE;
+    if (new_v < 0.0) {
+      vx = 0.0;
+      vy = 0.0;
+      omegaz = 0.0;
+      return true;
+    }
+    vx *= new_v / v;
+    vy *= new_v / v;
+    if (fabs(omegaz) <= EPSILON) {
+      omegaz = 0.0;
+    } else {
+      double turn_radius = v / omegaz;
+      omegaz = (omegaz < 0.0) ? -new_v / v: new_v / v;
+    }
+    return false;
   }
 
   void MoveBase::brakeThread()
@@ -714,7 +733,7 @@ namespace move_base {
     boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
     geometry_msgs::Twist cmd_vel;
     // TODO: dehardcode this (and fix parameters race condition)
-    ros::Rate r(20.0);
+    ros::Rate r(BRAKE_SAMPLE_RATE);
 
     while(n.ok()) {
       if (!brake_) {
