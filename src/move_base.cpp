@@ -1136,12 +1136,7 @@ namespace move_base {
             planning_retries_ = 0;
             state_ = PLANNING;
             applyBrakes();
-
-            //enable the planner thread in case it isn't running on a clock
-            boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
-            runPlanner_ = true;
-            planner_cond_.notify_one();
-            lock.unlock();
+            startPlanner();
           }
         }
         }
