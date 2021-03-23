@@ -66,6 +66,7 @@ namespace move_base {
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"),
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
+    planner_waypoint_indices_(NULL), latest_waypoint_indices_(NULL), controller_waypoint_indices_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
     ac_ = new MoveBaseSWPActionClient("move_base_swp", true);
@@ -102,6 +103,9 @@ namespace move_base {
     planner_plan_ = new std::vector<geometry_msgs::PoseStamped>();
     latest_plan_ = new std::vector<geometry_msgs::PoseStamped>();
     controller_plan_ = new std::vector<geometry_msgs::PoseStamped>();
+    planner_waypoint_indices_ = new std::vector<int>();
+    latest_waypoint_indices_ = new std::vector<int>();
+    controller_waypoint_indices_ = new std::vector<int>();
 
     //set up the planner's thread
     planner_thread_ = new boost::thread(boost::bind(&MoveBase::planThread, this));
@@ -254,8 +258,11 @@ namespace move_base {
 
         // Clean up before initializing the new planner
         planner_plan_->clear();
+        planner_waypoint_indices_->clear();
         latest_plan_->clear();
+        latest_waypoint_indices_->clear();
         controller_plan_->clear();
+        controller_waypoint_indices_->clear();
         resetState();
         planner_->initialize(bgp_loader_.getName(config.base_global_planner), planner_costmap_ros_);
 
@@ -275,8 +282,11 @@ namespace move_base {
         tc_ = blp_loader_.createInstance(config.base_local_planner);
         // Clean up before initializing the new planner
         planner_plan_->clear();
+        planner_waypoint_indices_->clear();
         latest_plan_->clear();
+        latest_waypoint_indices_->clear();
         controller_plan_->clear();
+        controller_waypoint_indices_->clear();
         resetState();
         tc_->initialize(blp_loader_.getName(config.base_local_planner), &tf_, controller_costmap_ros_);
       } catch (const pluginlib::PluginlibException& ex) {
@@ -494,6 +504,9 @@ namespace move_base {
     delete planner_plan_;
     delete latest_plan_;
     delete controller_plan_;
+    delete planner_waypoint_indices_;
+    delete latest_waypoint_indices_;
+    delete controller_waypoint_indices_;
 
     planner_.reset();
     tc_.reset();
@@ -641,6 +654,7 @@ namespace move_base {
 
       //run planner for each waypoint
       planner_plan_->clear();
+      planner_waypoint_indices_->clear();
       bool gotPlan = false;
       if (n.ok()) {
         for (auto w = temp_waypoints.begin(); w < temp_waypoints.end(); w++) {
@@ -656,9 +670,11 @@ namespace move_base {
           if (gotPlan) {
             ROS_INFO("planning succeeded!");
             planner_plan_->insert(planner_plan_->end(), temp_plan.begin(), temp_plan.end());
+            planner_waypoint_indices_->push_back(planner_plan_->size() - 1);
           } else {
             ROS_WARN("plan failed");
             planner_plan_->clear();
+            planner_waypoint_indices_->clear();
             break;
           }
         }
@@ -667,10 +683,13 @@ namespace move_base {
         ROS_DEBUG_NAMED("move_base_plan_thread","Got Plan with %zu points!", planner_plan_->size());
         //pointer swap the plans under mutex (the controller will pull from latest_plan_)
         std::vector<geometry_msgs::PoseStamped>* temp_plan = planner_plan_;
+        std::vector<int>* temp_waypoint_indices = planner_waypoint_indices_;
 
         lock.lock();
         planner_plan_ = latest_plan_;
+        planner_waypoint_indices_ = latest_waypoint_indices_;
         latest_plan_ = temp_plan;
+        latest_waypoint_indices_ = temp_waypoint_indices;
         last_valid_plan_ = ros::Time::now();
         planning_retries_ = 0;
         new_global_plan_ = true;
@@ -1040,10 +1059,13 @@ namespace move_base {
 
       //do a pointer swap under mutex
       std::vector<geometry_msgs::PoseStamped>* temp_plan = controller_plan_;
+      std::vector<int>* temp_waypoint_indices = controller_waypoint_indices_;
 
       boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
       controller_plan_ = latest_plan_;
+      controller_waypoint_indices_ = latest_waypoint_indices_;
       latest_plan_ = temp_plan;
+      latest_waypoint_indices_ = temp_waypoint_indices;
       lock.unlock();
       ROS_DEBUG_NAMED("move_base","pointers swapped!");
 

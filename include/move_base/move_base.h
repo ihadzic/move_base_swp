@@ -253,6 +253,9 @@ namespace move_base {
       std::vector<geometry_msgs::PoseStamped>* planner_plan_;
       std::vector<geometry_msgs::PoseStamped>* latest_plan_;
       std::vector<geometry_msgs::PoseStamped>* controller_plan_;
+      std::vector<int>* planner_waypoint_indices_;
+      std::vector<int>* latest_waypoint_indices_;
+      std::vector<int>* controller_waypoint_indices_;
 
       //set up the planner's thread
       bool runPlanner_;
