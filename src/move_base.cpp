@@ -668,9 +668,10 @@ namespace move_base {
             gotPlan = planner_->makePlan(*(w-1), *w, temp_plan);
           }
           if (gotPlan) {
-            ROS_INFO("planning succeeded!");
             planner_plan_->insert(planner_plan_->end(), temp_plan.begin(), temp_plan.end());
-            planner_waypoint_indices_->push_back(planner_plan_->size() - 1);
+            int wp_index = planner_plan_->size() - 1;
+            ROS_INFO("planning succeeded, wp_index=%d", wp_index);
+            planner_waypoint_indices_->push_back(wp_index);
           } else {
             ROS_WARN("plan failed");
             planner_plan_->clear();
