@@ -1080,7 +1080,6 @@ namespace move_base {
         //ABORT and SHUTDOWN COSTMAPS
         ROS_ERROR("Failed to pass global plan to the controller, aborting.");
         resetState();
-        stopPlanner();
         as_->setAborted(move_base_swp::MoveBaseSWPResult(),
                         "Failed to pass global plan to the controller.");
         return true;
@@ -1107,7 +1106,6 @@ namespace move_base {
         if(tc_->isGoalReached()){
           ROS_DEBUG_NAMED("move_base","Goal reached!");
           resetState();
-          stopPlanner();
           as_->setSucceeded(move_base_swp::MoveBaseSWPResult(), "Goal reached.");
           return true;
         }
@@ -1211,7 +1209,6 @@ namespace move_base {
       default:
         ROS_ERROR("This case should never be reached, something is wrong, aborting");
         resetState();
-        stopPlanner();
         as_->setAborted(move_base_swp::MoveBaseSWPResult(), "Reached a case that should not be hit in move_base. This is a bug, please report it.");
         return true;
     }
@@ -1347,8 +1344,8 @@ namespace move_base {
     return;
   }
 
-  void MoveBase::resetState(){
-    // Disable the planner thread
+  void MoveBase::resetState()
+  {
     stopPlanner();
     // Reset statemachine
     state_ = PLANNING;
