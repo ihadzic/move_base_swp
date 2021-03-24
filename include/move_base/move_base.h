@@ -210,6 +210,11 @@ namespace move_base {
        */
       void startPlanner();
 
+      /**
+       * @brief  Stops the planner
+       */
+      void stopPlanner();
+
       tf2_ros::Buffer& tf_;
 
       MoveBaseSWPActionServer* as_;
