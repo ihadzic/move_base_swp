@@ -1094,11 +1094,7 @@ namespace move_base {
     switch(state_){
       //if we are in a planning state, then we'll attempt to make a plan
       case PLANNING:
-        {
-          boost::recursive_mutex::scoped_lock lock(planner_mutex_);
-          runPlanner_ = true;
-          planner_cond_.notify_one();
-        }
+        startPlanner();
         ROS_DEBUG_NAMED("move_base","Waiting for plan, in the planning state.");
         break;
 
