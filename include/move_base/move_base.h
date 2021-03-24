@@ -202,7 +202,7 @@ namespace move_base {
 
       /**
        * @brief  Give waypoints to the planner and start it up
-       * @param Reference to waypoints to load
+       * @param event Reference to waypoints to load
        */
       void startPlanner(const std::vector<geometry_msgs::PoseStamped>& waypoints);
       /**
