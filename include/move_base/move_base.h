@@ -215,6 +215,13 @@ namespace move_base {
        */
       void stopPlanner();
 
+      /**
+       * @brief  Finds the closest waypoint on the plan
+       * @param cwpi Reference to the current waypoint index
+       * @param plan Reference to the plan
+       */
+      void updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan);
+
       tf2_ros::Buffer& tf_;
 
       MoveBaseSWPActionServer* as_;
@@ -261,6 +268,7 @@ namespace move_base {
       std::vector<int>* planner_waypoint_indices_;
       std::vector<int>* latest_waypoint_indices_;
       std::vector<int>* controller_waypoint_indices_;
+      int closest_plan_waypoint_index_;
 
       //set up the planner's thread
       bool runPlanner_;

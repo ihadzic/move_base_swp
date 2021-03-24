@@ -67,6 +67,7 @@ namespace move_base {
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     planner_waypoint_indices_(NULL), latest_waypoint_indices_(NULL), controller_waypoint_indices_(NULL),
+    closest_plan_waypoint_index_(-1),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
     ac_ = new MoveBaseSWPActionClient("move_base_swp", true);
@@ -263,6 +264,7 @@ namespace move_base {
         latest_waypoint_indices_->clear();
         controller_plan_->clear();
         controller_waypoint_indices_->clear();
+        closest_plan_waypoint_index_ = -1;
         resetState();
         planner_->initialize(bgp_loader_.getName(config.base_global_planner), planner_costmap_ros_);
 
@@ -287,6 +289,7 @@ namespace move_base {
         latest_waypoint_indices_->clear();
         controller_plan_->clear();
         controller_waypoint_indices_->clear();
+        closest_plan_waypoint_index_ = -1;
         resetState();
         tc_->initialize(blp_loader_.getName(config.base_local_planner), &tf_, controller_costmap_ros_);
       } catch (const pluginlib::PluginlibException& ex) {
@@ -1024,6 +1027,20 @@ namespace move_base {
     return hypot(p1.pose.position.x - p2.pose.position.x, p1.pose.position.y - p2.pose.position.y);
   }
 
+  void MoveBase::updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    geometry_msgs::PoseStamped current_pose;
+    getRobotPose(current_pose, planner_costmap_ros_);
+    double lowest_d = distance(current_pose, plan[cwpi]);
+    int i;
+    for (i = cwpi + 1; i < plan.size(); i++) {
+      if (distance(current_pose, plan[i]) > lowest_d)
+        break;
+    }
+    cwpi = i - 1;
+  }
+
   bool MoveBase::executeCycle() {
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
@@ -1071,6 +1088,7 @@ namespace move_base {
       boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
       controller_plan_ = latest_plan_;
       controller_waypoint_indices_ = latest_waypoint_indices_;
+      closest_plan_waypoint_index_ = 0;
       latest_plan_ = temp_plan;
       latest_waypoint_indices_ = temp_waypoint_indices;
       lock.unlock();
@@ -1126,6 +1144,7 @@ namespace move_base {
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
+          updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
