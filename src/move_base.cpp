@@ -603,6 +603,12 @@ namespace move_base {
       logPose("loading waypoint", *g);
       waypoints.push_back(goalToGlobalFrame(*g));
     }
+    if (waypoints.size() == 0) {
+      ROS_WARN("Received empty waypoint list");
+      as_->setAborted(move_base_swp::MoveBaseSWPResult(),
+                      "SWP goal contains no waypoints");
+      return false;
+    }
     current_goal_pub_.publish(waypoints.back());
     publishWaypoints(waypoints);
     return true;
