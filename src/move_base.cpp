@@ -116,6 +116,7 @@ namespace move_base {
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
     current_waypoints_pub_ = private_nh.advertise<geometry_msgs::PoseArray>("current_waypoints", 0);
+    snapped_pose_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("snapped_pose", 0);
 
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
@@ -1033,7 +1034,7 @@ namespace move_base {
     return hypot(p1.pose.position.x - p2.pose.position.x, p1.pose.position.y - p2.pose.position.y);
   }
 
-  void MoveBase::updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan)
+  geometry_msgs::PoseStamped MoveBase::updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan)
   {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
     geometry_msgs::PoseStamped current_pose;
@@ -1045,6 +1046,10 @@ namespace move_base {
         break;
     }
     cwpi = i - 1;
+    geometry_msgs::PoseStamped snapped_pose = plan[cwpi];
+    // overrite orientation because some planners don't set it
+    snapped_pose.pose.orientation = current_pose.pose.orientation;
+    return snapped_pose;
   }
 
   bool MoveBase::executeCycle() {
@@ -1150,7 +1155,8 @@ namespace move_base {
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
-          updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
+          geometry_msgs::PoseStamped snapped_pose = updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
+          snapped_pose_pub_.publish(snapped_pose);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)

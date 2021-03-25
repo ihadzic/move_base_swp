@@ -219,8 +219,9 @@ namespace move_base {
        * @brief  Finds the closest waypoint on the plan
        * @param cwpi Reference to the current waypoint index
        * @param plan Reference to the plan
+       * @return waypoint pose
        */
-      void updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan);
+      geometry_msgs::PoseStamped updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan);
 
       tf2_ros::Buffer& tf_;
 
@@ -245,7 +246,7 @@ namespace move_base {
       uint32_t planning_retries_;
       double conservative_reset_dist_, clearing_radius_;
       double brake_slope_;
-      ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_;
+      ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_, snapped_pose_pub_;
       ros::Subscriber goal_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
