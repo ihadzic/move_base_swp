@@ -1061,7 +1061,7 @@ namespace move_base {
       // away than the circumference of a circle determined by the
       // initial distance are unlikely to be of interest
       if (covered_distance > search_radius * 2 * M_PI)
-	break;
+        break;
     }
     geometry_msgs::PoseStamped snapped_pose = plan[lowest_i];
     // overwrite orientation because some planners don't set it
