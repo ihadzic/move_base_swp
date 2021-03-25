@@ -49,6 +49,7 @@
 #define AC_TIMEOUT .5
 #define BRAKE_SAMPLE_RATE 20.0
 #define EPSILON 0.01
+#define MIN_WP_SEARCH_RANGE 5
 
 namespace move_base {
 
@@ -1041,11 +1042,24 @@ namespace move_base {
     getRobotPose(current_pose, planner_costmap_ros_);
     double lowest_d = distance(current_pose, plan[cwpi]);
     int i;
+    int lowest_i = cwpi;
     for (i = cwpi + 1; i < plan.size(); i++) {
-      if (distance(current_pose, plan[i]) > lowest_d)
-        break;
+      double d = distance(current_pose, plan[i]);
+      if (d > lowest_d) {
+        // As long as the distance is getting smaller, advance
+        // through the plan, when it goes up that's the snapped
+        // waypoint. We need this window to skip over waypoint
+        // that may go slightly back. REVISIT: figure out more
+        // "geometric" way to do this
+        if (i - cwpi > MIN_WP_SEARCH_RANGE) {
+          break;
+        }
+      } else {
+        lowest_d = d;
+        lowest_i = i;
+      }
     }
-    cwpi = i - 1;
+    cwpi = lowest_i;
     geometry_msgs::PoseStamped snapped_pose = plan[cwpi];
     // overrite orientation because some planners don't set it
     snapped_pose.pose.orientation = current_pose.pose.orientation;
