@@ -49,7 +49,6 @@
 #define AC_TIMEOUT .5
 #define BRAKE_SAMPLE_RATE 20.0
 #define EPSILON 0.01
-#define MIN_WP_SEARCH_RANGE 5
 
 namespace move_base {
 
@@ -1041,28 +1040,27 @@ namespace move_base {
     geometry_msgs::PoseStamped current_pose;
     getRobotPose(current_pose, planner_costmap_ros_);
     double lowest_d = distance(current_pose, plan[cwpi]);
-    int i;
+    double search_radius = lowest_d;
+    double covered_distance = 0.0;
     int lowest_i = cwpi;
-    for (i = cwpi + 1; i < plan.size(); i++) {
+    for (int i = cwpi + 1; i < plan.size(); i++) {
       double d = distance(current_pose, plan[i]);
-      if (d > lowest_d) {
-        // As long as the distance is getting smaller, advance
-        // through the plan, when it goes up that's the snapped
-        // waypoint. We need this window to skip over waypoint
-        // that may go slightly back. REVISIT: figure out more
-        // "geometric" way to do this
-        if (i - cwpi > MIN_WP_SEARCH_RANGE) {
-          break;
-        }
-      } else {
+      if (d < lowest_d) {
         lowest_d = d;
         lowest_i = i;
       }
+      covered_distance += distance(plan[i-1], plan[i]);
+      // early-termination heuristics: points that are further
+      // away than the circumference of a circle determined by the
+      // initial distance are unlikely to be of interest
+      if (covered_distance > search_radius * 2 * M_PI)
+	break;
     }
-    cwpi = lowest_i;
-    geometry_msgs::PoseStamped snapped_pose = plan[cwpi];
-    // overrite orientation because some planners don't set it
+    geometry_msgs::PoseStamped snapped_pose = plan[lowest_i];
+    // overwrite orientation because some planners don't set it
     snapped_pose.pose.orientation = current_pose.pose.orientation;
+    // side-effect: update the index that caller passed
+    cwpi = lowest_i;
     return snapped_pose;
   }
 
