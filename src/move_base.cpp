@@ -117,6 +117,7 @@ namespace move_base {
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
     current_waypoints_pub_ = private_nh.advertise<geometry_msgs::PoseArray>("current_waypoints", 0);
     snapped_pose_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("snapped_pose", 0);
+    pursued_plan_pub_ = private_nh.advertise<nav_msgs::Path>("pursued_plan", 0);
 
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
@@ -578,6 +579,15 @@ namespace move_base {
     }
 
     return true;
+  }
+
+  void MoveBase::publishPlan(const std::vector<geometry_msgs::PoseStamped>& plan)
+  {
+    nav_msgs::Path p;
+    p.poses = plan;
+    p.header.stamp = ros::Time::now();
+    p.header.frame_id = planner_costmap_ros_->getGlobalFrameID();
+    pursued_plan_pub_.publish(p);
   }
 
   void MoveBase::publishWaypoints(const std::vector<geometry_msgs::PoseStamped>& waypoints)
@@ -1182,6 +1192,12 @@ namespace move_base {
           snapped_pose_pub_.publish(snapped_pose);
           pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
           publishWaypoints(planner_waypoints_);
+          // TODO: de-hardocde 100
+          near_term_plan_segment_ =
+            std::vector<geometry_msgs::PoseStamped>(controller_plan_->begin() + closest_plan_waypoint_index_,
+                                                    std::min(controller_plan_->begin() + closest_plan_waypoint_index_ + 100,
+                                                             controller_plan_->end()));
+          publishPlan(near_term_plan_segment_);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
