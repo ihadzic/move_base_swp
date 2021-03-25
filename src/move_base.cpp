@@ -1052,6 +1052,20 @@ namespace move_base {
     return snapped_pose;
   }
 
+  void MoveBase::pruneWaypoints(int cwpi, std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    if (waypoints.size() != waypoint_indices.size())
+      ROS_FATAL("BUG! inconsistent waypoint list %lu!=%lu",
+                waypoints.size(), waypoint_indices.size());
+    // never prune the last waypoint (it can only drop after we reach the goal)
+    while (waypoint_indices[0] <= cwpi && waypoint_indices.size() > 1) {
+      ROS_INFO("pruned waypoint at %d", waypoint_indices[0]);
+      waypoint_indices.erase(waypoint_indices.begin());
+      waypoints.erase(waypoints.begin());
+    }
+  }
+
   bool MoveBase::executeCycle() {
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
@@ -1157,6 +1171,7 @@ namespace move_base {
           last_valid_control_ = ros::Time::now();
           geometry_msgs::PoseStamped snapped_pose = updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
           snapped_pose_pub_.publish(snapped_pose);
+          pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)

@@ -223,6 +223,14 @@ namespace move_base {
        */
       geometry_msgs::PoseStamped updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan);
 
+      /**
+       * @brief  Drops waypoints that have been visited
+       * @param cwpi Closest Waypoint index
+       * @param waypoints Reference to the vector of waypoints
+       * @param waypoint_indices Reference to the vector of waypoint indices
+       */
+      void pruneWaypoints(int cwpi, std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices);
+
       tf2_ros::Buffer& tf_;
 
       MoveBaseSWPActionServer* as_;
