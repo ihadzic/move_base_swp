@@ -1186,6 +1186,7 @@ namespace move_base {
           geometry_msgs::PoseStamped snapped_pose = updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
           snapped_pose_pub_.publish(snapped_pose);
           pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
+          publishWaypoints(planner_waypoints_);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
