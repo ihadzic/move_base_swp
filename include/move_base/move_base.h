@@ -231,6 +231,11 @@ namespace move_base {
        */
       void pruneWaypoints(int cwpi, std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices);
 
+      /**
+       * @brief  Clear all plans
+       */
+      void clearPlans();
+
       tf2_ros::Buffer& tf_;
 
       MoveBaseSWPActionServer* as_;

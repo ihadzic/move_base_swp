@@ -204,6 +204,17 @@ namespace move_base {
     dsrv_->setCallback(cb);
   }
 
+  void MoveBase::clearPlans()
+  {
+    planner_plan_->clear();
+    planner_waypoint_indices_->clear();
+    latest_plan_->clear();
+    latest_waypoint_indices_->clear();
+    controller_plan_->clear();
+    controller_waypoint_indices_->clear();
+    closest_plan_waypoint_index_ = -1;
+  }
+
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
     boost::recursive_mutex::scoped_lock l(configuration_mutex_);
 
@@ -258,14 +269,7 @@ namespace move_base {
         // wait for the current planner to finish planning
         boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
 
-        // Clean up before initializing the new planner
-        planner_plan_->clear();
-        planner_waypoint_indices_->clear();
-        latest_plan_->clear();
-        latest_waypoint_indices_->clear();
-        controller_plan_->clear();
-        controller_waypoint_indices_->clear();
-        closest_plan_waypoint_index_ = -1;
+        clearPlans();
         resetState();
         planner_->initialize(bgp_loader_.getName(config.base_global_planner), planner_costmap_ros_);
 
@@ -283,14 +287,7 @@ namespace move_base {
       //create a local planner
       try {
         tc_ = blp_loader_.createInstance(config.base_local_planner);
-        // Clean up before initializing the new planner
-        planner_plan_->clear();
-        planner_waypoint_indices_->clear();
-        latest_plan_->clear();
-        latest_waypoint_indices_->clear();
-        controller_plan_->clear();
-        controller_waypoint_indices_->clear();
-        closest_plan_waypoint_index_ = -1;
+        clearPlans();
         resetState();
         tc_->initialize(blp_loader_.getName(config.base_local_planner), &tf_, controller_costmap_ros_);
       } catch (const pluginlib::PluginlibException& ex) {
