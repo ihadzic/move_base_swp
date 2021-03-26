@@ -1160,8 +1160,13 @@ namespace move_base {
       latest_waypoint_indices_ = temp_waypoint_indices;
       lock.unlock();
       ROS_DEBUG_NAMED("move_base","pointers swapped!");
-      updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_);
-      if(!tc_->setPlan(near_term_plan_segment_)) {
+      bool plan_set;
+      if (plan_buffer_size_ > 0) {
+        updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_);
+        plan_set = tc_->setPlan(near_term_plan_segment_);
+      } else
+        plan_set = tc_->setPlan(*controller_plan_);
+      if(!plan_set) {
         //ABORT and SHUTDOWN COSTMAPS
         ROS_ERROR("Failed to pass global plan to the controller, aborting.");
         resetState();
@@ -1208,9 +1213,11 @@ namespace move_base {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
 
         bool plan_ok = true;
-        if (updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_)) {
-          // near-term plan needed update, so pass it to the local planner
-          plan_ok = tc_->setPlan(near_term_plan_segment_);
+        if (plan_buffer_size_ > 0) {
+          if (updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_)) {
+            // near-term plan needed update, so pass it to the local planner
+            plan_ok = tc_->setPlan(near_term_plan_segment_);
+          }
         }
         if(plan_ok && tc_->computeVelocityCommands(cmd_vel)){
           publishPlan(near_term_plan_segment_);
