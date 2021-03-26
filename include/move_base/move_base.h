@@ -226,6 +226,16 @@ namespace move_base {
       geometry_msgs::PoseStamped updateClosestWaypointIndex(int& cwpi, const std::vector<geometry_msgs::PoseStamped>& plan);
 
       /**
+       * @brief  Checks if the near-term plan needs more points fed and advances it
+       * @param cwpi Reference to the current waypoint index
+       * @param full_plan Global plan
+       * @param pwpi reference to the pursued waypoint
+       * @param near_term_plan Reference to the constructed near-term plan
+       * @return true if the plan was updated
+       */
+      bool updateNearTermPlan(int cwpi, const std::vector<geometry_msgs::PoseStamped>& full_plan, int& pwpi, std::vector<geometry_msgs::PoseStamped>& near_term_plan);
+
+      /**
        * @brief  Drops waypoints that have been visited
        * @param cwpi Closest Waypoint index
        * @param waypoints Reference to the vector of waypoints
@@ -286,6 +296,7 @@ namespace move_base {
       std::vector<int>* latest_waypoint_indices_;
       std::vector<int>* controller_waypoint_indices_;
       int closest_plan_waypoint_index_;
+      int pursued_plan_waypoint_index_;
 
       //set up the planner's thread
       bool runPlanner_;

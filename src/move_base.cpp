@@ -67,7 +67,7 @@ namespace move_base {
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     planner_waypoint_indices_(NULL), latest_waypoint_indices_(NULL), controller_waypoint_indices_(NULL),
-    closest_plan_waypoint_index_(-1),
+    closest_plan_waypoint_index_(-1), pursued_plan_waypoint_index_(-1),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
     ac_ = new MoveBaseSWPActionClient("move_base_swp", true);
@@ -214,6 +214,7 @@ namespace move_base {
     controller_plan_->clear();
     controller_waypoint_indices_->clear();
     closest_plan_waypoint_index_ = -1;
+    pursued_plan_waypoint_index_ = -1;
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -1071,6 +1072,24 @@ namespace move_base {
     return snapped_pose;
   }
 
+  bool MoveBase::updateNearTermPlan(int cwpi, const std::vector<geometry_msgs::PoseStamped>& full_plan, int& pwpi, std::vector<geometry_msgs::PoseStamped>& near_term_plan)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    // TODO: de-hardocde these
+    int reload_threshold = 100;
+    int reload_batch_size = 150;
+    // check if under the reload threshold or if nothing left to load
+    if (pwpi - cwpi > reload_threshold || pwpi == full_plan.size())
+      return false;
+    int new_pwpi = cwpi + reload_batch_size;
+    if (new_pwpi > full_plan.size())
+      new_pwpi = full_plan.size();
+    near_term_plan =
+      std::vector<geometry_msgs::PoseStamped>(full_plan.begin() + cwpi, full_plan.begin() + new_pwpi);
+    pwpi = new_pwpi;
+    return true;
+  }
+
   void MoveBase::pruneWaypoints(int cwpi, std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices)
   {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
@@ -1133,12 +1152,13 @@ namespace move_base {
       controller_plan_ = latest_plan_;
       controller_waypoint_indices_ = latest_waypoint_indices_;
       closest_plan_waypoint_index_ = 0;
+      pursued_plan_waypoint_index_ = -1;
       latest_plan_ = temp_plan;
       latest_waypoint_indices_ = temp_waypoint_indices;
       lock.unlock();
       ROS_DEBUG_NAMED("move_base","pointers swapped!");
-
-      if(!tc_->setPlan(*controller_plan_)){
+      updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_);
+      if(!tc_->setPlan(near_term_plan_segment_)) {
         //ABORT and SHUTDOWN COSTMAPS
         ROS_ERROR("Failed to pass global plan to the controller, aborting.");
         resetState();
@@ -1146,7 +1166,7 @@ namespace move_base {
                         "Failed to pass global plan to the controller.");
         return true;
       }
-
+      publishPlan(near_term_plan_segment_);
       //make sure to reset recovery_index_ since we were able to find a valid plan
       if(recovery_trigger_ == PLANNING_R)
         recovery_index_ = 0;
@@ -1184,7 +1204,13 @@ namespace move_base {
         {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
 
-        if(tc_->computeVelocityCommands(cmd_vel)){
+        bool plan_ok = true;
+        if (updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_)) {
+          // near-term plan needed update, so pass it to the local planner
+          plan_ok = tc_->setPlan(near_term_plan_segment_);
+        }
+        if(plan_ok && tc_->computeVelocityCommands(cmd_vel)){
+          publishPlan(near_term_plan_segment_);
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
@@ -1192,12 +1218,6 @@ namespace move_base {
           snapped_pose_pub_.publish(snapped_pose);
           pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
           publishWaypoints(planner_waypoints_);
-          // TODO: de-hardocde 100
-          near_term_plan_segment_ =
-            std::vector<geometry_msgs::PoseStamped>(controller_plan_->begin() + closest_plan_waypoint_index_,
-                                                    std::min(controller_plan_->begin() + closest_plan_waypoint_index_ + 100,
-                                                             controller_plan_->end()));
-          publishPlan(near_term_plan_segment_);
           //make sure that we send the velocity command to the base
           setVelocity(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
