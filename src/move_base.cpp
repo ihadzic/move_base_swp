@@ -1194,10 +1194,19 @@ namespace move_base {
 
         //check to see if we've reached our goal
         if(tc_->isGoalReached()){
-          ROS_DEBUG_NAMED("move_base","Goal reached!");
-          resetState();
-          as_->setSucceeded(move_base_swp::MoveBaseSWPResult(), "Goal reached.");
-          return true;
+          ROS_DEBUG_NAMED("move_base","Goal (probably) reached!");
+          if (pursued_plan_waypoint_index_ < 0 || pursued_plan_waypoint_index_ == controller_plan_->size()) {
+            resetState();
+            as_->setSucceeded(move_base_swp::MoveBaseSWPResult(), "Goal reached.");
+            return true;
+          } else {
+            ROS_INFO("Plan not fully executed, re-planning");
+            last_valid_plan_ = ros::Time::now();
+            planning_retries_ = 0;
+            state_ = PLANNING;
+            applyBrakes();
+            startPlanner();
+          }
         }
 
         //check for an oscillation condition
