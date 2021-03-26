@@ -141,6 +141,9 @@ namespace move_base {
 
     private_nh.param("brake_slope", brake_slope_, 0.5);
 
+    private_nh.param("plan_buffer_size", plan_buffer_size_, 150);
+    private_nh.param("plan_reload_threshold", plan_reload_threshold_, 100);
+
     //create the ros wrapper for the planner's costmap... and initializer a pointer we'll use with the underlying map
     planner_costmap_ros_ = new costmap_2d::Costmap2DROS("global_costmap", tf_);
     planner_costmap_ros_->pause();
@@ -258,6 +261,9 @@ namespace move_base {
     shutdown_costmaps_ = config.shutdown_costmaps;
 
     brake_slope_ = config.brake_slope;
+
+    plan_buffer_size_ = config.plan_buffer_size;
+    plan_reload_threshold_ = config.plan_reload_threshold;
 
     oscillation_timeout_ = config.oscillation_timeout;
     oscillation_distance_ = config.oscillation_distance;
@@ -1075,13 +1081,10 @@ namespace move_base {
   bool MoveBase::updateNearTermPlan(int cwpi, const std::vector<geometry_msgs::PoseStamped>& full_plan, int& pwpi, std::vector<geometry_msgs::PoseStamped>& near_term_plan)
   {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
-    // TODO: de-hardocde these
-    int reload_threshold = 100;
-    int reload_batch_size = 150;
     // check if under the reload threshold or if nothing left to load
-    if (pwpi - cwpi > reload_threshold || pwpi == full_plan.size())
+    if (pwpi - cwpi > plan_reload_threshold_ || pwpi == full_plan.size())
       return false;
-    int new_pwpi = cwpi + reload_batch_size;
+    int new_pwpi = cwpi + plan_buffer_size_;
     if (new_pwpi > full_plan.size())
       new_pwpi = full_plan.size();
     near_term_plan =

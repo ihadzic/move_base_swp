@@ -297,6 +297,8 @@ namespace move_base {
       std::vector<int>* controller_waypoint_indices_;
       int closest_plan_waypoint_index_;
       int pursued_plan_waypoint_index_;
+      int plan_buffer_size_;
+      int plan_reload_threshold_;
 
       //set up the planner's thread
       bool runPlanner_;
