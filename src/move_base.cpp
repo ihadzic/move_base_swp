@@ -49,6 +49,7 @@
 #define AC_TIMEOUT .5
 #define BRAKE_SAMPLE_RATE 20.0
 #define EPSILON 0.01
+#define MAX_REPLAN_ON_INCOMPLETE 8
 
 namespace move_base {
 
@@ -905,6 +906,7 @@ namespace move_base {
   {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
     planner_waypoints_= waypoints;
+    replan_on_incomplete_counter_ = 0;
     runPlanner_ = true;
     planner_cond_.notify_one();
   }
@@ -1110,6 +1112,22 @@ namespace move_base {
     }
   }
 
+  void MoveBase::pruneFirstWaypoint(std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    if (waypoints.size() != waypoint_indices.size())
+      ROS_FATAL("BUG! inconsistent waypoint list %lu!=%lu",
+                waypoints.size(), waypoint_indices.size());
+    // never prune the last waypoint (it can only drop after we reach the goal)
+    if (waypoint_indices.size() > 1) {
+      ROS_INFO("pruned waypoint at %d", waypoint_indices[0]);
+      waypoint_indices.erase(waypoint_indices.begin());
+      waypoints.erase(waypoints.begin());
+    } else {
+      ROS_ERROR("BUG?: prineFirstWaypoint called with single-element waypoint list");
+    }
+  }
+
   bool MoveBase::executeCycle() {
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
@@ -1201,14 +1219,21 @@ namespace move_base {
           if (pursued_plan_waypoint_index_ < 0 || pursued_plan_waypoint_index_ == controller_plan_->size()) {
             resetState();
             as_->setSucceeded(move_base_swp::MoveBaseSWPResult(), "Goal reached.");
+            replan_on_incomplete_counter_ = 0;
             return true;
           } else {
-            ROS_INFO("Plan not fully executed, re-planning");
-            last_valid_plan_ = ros::Time::now();
+            replan_on_incomplete_counter_++;
+            ROS_INFO("Plan not fully executed, re-planning retry=%u", replan_on_incomplete_counter_);
+            if (replan_on_incomplete_counter_ > MAX_REPLAN_ON_INCOMPLETE) {
+              ROS_WARN("Detected infeasable waypoint, pruning");
+              pruneFirstWaypoint(planner_waypoints_, *controller_waypoint_indices_);
+              replan_on_incomplete_counter_++;
+            }
             planning_retries_ = 0;
+            last_valid_plan_ = ros::Time::now();
             state_ = PLANNING;
             applyBrakes();
-            startPlanner();
+            return false;
           }
         }
 

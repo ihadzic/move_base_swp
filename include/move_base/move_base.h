@@ -244,6 +244,14 @@ namespace move_base {
       void pruneWaypoints(int cwpi, std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices);
 
       /**
+       * @brief  Drops first waypoint in the plan
+       * @param cwpi Closest Waypoint index
+       * @param waypoints Reference to the vector of waypoints
+       * @param waypoint_indices Reference to the vector of waypoint indices
+       */
+      void pruneFirstWaypoint(std::vector<geometry_msgs::PoseStamped>& waypoints, std::vector<int>& waypoint_indices);
+
+      /**
        * @brief  Clear all plans
        */
       void clearPlans();
@@ -269,6 +277,7 @@ namespace move_base {
       double planner_patience_, controller_patience_;
       int32_t max_planning_retries_;
       uint32_t planning_retries_;
+      uint32_t replan_on_incomplete_counter_;
       double conservative_reset_dist_, clearing_radius_;
       double brake_slope_;
       ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_, snapped_pose_pub_, pursued_plan_pub_;
