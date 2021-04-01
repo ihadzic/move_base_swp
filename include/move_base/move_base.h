@@ -277,6 +277,7 @@ namespace move_base {
       double planner_frequency_, controller_frequency_, inscribed_radius_, circumscribed_radius_;
       double planner_patience_, controller_patience_;
       int32_t max_planning_retries_;
+      int32_t max_replan_on_incomplete_;
       uint32_t planning_retries_;
       uint32_t replan_on_incomplete_counter_;
       double conservative_reset_dist_, clearing_radius_;

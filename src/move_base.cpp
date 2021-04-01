@@ -48,7 +48,6 @@
 
 #define AC_TIMEOUT .5
 #define EPSILON 0.01
-#define MAX_REPLAN_ON_INCOMPLETE 8
 
 namespace move_base {
 
@@ -92,6 +91,7 @@ namespace move_base {
     private_nh.param("planner_patience", planner_patience_, 5.0);
     private_nh.param("controller_patience", controller_patience_, 15.0);
     private_nh.param("max_planning_retries", max_planning_retries_, -1);  // disabled by default
+    private_nh.param("max_replan_on_incomplete", max_replan_on_incomplete_, 8);
 
     private_nh.param("oscillation_timeout", oscillation_timeout_, 0.0);
     private_nh.param("oscillation_distance", oscillation_distance_, 0.5);
@@ -259,6 +259,7 @@ namespace move_base {
     planner_patience_ = config.planner_patience;
     controller_patience_ = config.controller_patience;
     max_planning_retries_ = config.max_planning_retries;
+    max_replan_on_incomplete_ = config.max_replan_on_incomplete;
     conservative_reset_dist_ = config.conservative_reset_dist;
 
     recovery_behavior_enabled_ = config.recovery_behavior_enabled;
@@ -1259,7 +1260,7 @@ namespace move_base {
           } else {
             replan_on_incomplete_counter_++;
             ROS_INFO("Plan not fully executed, re-planning retry=%u", replan_on_incomplete_counter_);
-            if (replan_on_incomplete_counter_ > MAX_REPLAN_ON_INCOMPLETE) {
+            if (replan_on_incomplete_counter_ > max_replan_on_incomplete_) {
               ROS_WARN("Detected infeasable waypoint, pruning");
               pruneFirstWaypoint(planner_waypoints_, *controller_waypoint_indices_);
               replan_on_incomplete_counter_++;
