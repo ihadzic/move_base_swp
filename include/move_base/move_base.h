@@ -168,9 +168,10 @@ namespace move_base {
        * @param vx Reference to linear velocity (x component)
        * @param vy Reference to linear velocity (y component)
        * @param vy Reference to angular velocity (y component)
+       * @param delta Step by which to reduce the velocity in this step
        * @return True if the service call succeeds, false otherwise
        */
-      bool rampDownVelocity(double& vx, double& vy, double& omegaz, double slope);
+      bool rampDownVelocity(double& vx, double& vy, double& omegaz, double delta);
 
       /**
        * @brief  Reset the state of the move_base action and send a zero velocity command to the base
@@ -280,6 +281,7 @@ namespace move_base {
       uint32_t replan_on_incomplete_counter_;
       double conservative_reset_dist_, clearing_radius_;
       double brake_slope_;
+      double brake_sample_rate_;
       ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_, snapped_pose_pub_, pursued_plan_pub_;
       ros::Subscriber goal_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
