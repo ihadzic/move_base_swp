@@ -683,6 +683,11 @@ namespace move_base {
       //run planner for each waypoint
       planner_plan_->clear();
       planner_waypoint_indices_->clear();
+      double planner_frequency;
+      {
+        boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+        planner_frequency = planner_frequency_;
+      }
       bool gotPlan = false;
       if (n.ok()) {
         for (auto w = temp_waypoints.begin(); w < temp_waypoints.end(); w++) {
@@ -728,14 +733,21 @@ namespace move_base {
         //make sure we only start the controller if we still haven't reached the goal
         if(runPlanner_)
           state_ = CONTROLLING;
-        if(planner_frequency_ <= 0)
+        if(planner_frequency <= 0)
           runPlanner_ = false;
         lock.unlock();
       }
       //if we didn't get a plan and we are in the planning state (the robot isn't moving)
       else if(state_==PLANNING){
+        uint32_t max_planning_retries;
+        double planner_patience;
+        {
+          boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+          max_planning_retries = (uint32_t)max_planning_retries_;
+          planner_patience = planner_patience_;
+        }
         ROS_DEBUG_NAMED("move_base_plan_thread","No Plan...");
-        ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience_);
+        ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience);
 
         //check if we've tried to make a plan for over our time limit or our maximum number of retries
         //issue #496: we stop planning when one of the conditions is true, but if max_planning_retries_
@@ -743,7 +755,7 @@ namespace move_base {
         lock.lock();
         planning_retries_++;
         if(runPlanner_ &&
-           (ros::Time::now() > attempt_end || planning_retries_ > uint32_t(max_planning_retries_))){
+           (ros::Time::now() > attempt_end || planning_retries_ > max_planning_retries)) {
           //we'll move into our obstacle clearing mode
           state_ = CLEARING;
           runPlanner_ = false;  // proper solution for issue #523
@@ -758,8 +770,8 @@ namespace move_base {
       lock.lock();
 
       //setup sleep interface if needed
-      if(planner_frequency_ > 0){
-        ros::Duration sleep_time = (start_time + ros::Duration(1.0/planner_frequency_)) - ros::Time::now();
+      if(planner_frequency > 0){
+        ros::Duration sleep_time = (start_time + ros::Duration(1.0/planner_frequency)) - ros::Time::now();
         if (sleep_time > ros::Duration(0.0)){
           wait_for_wake = true;
           timer = n.createTimer(sleep_time, &MoveBase::wakePlanner, this);
@@ -768,11 +780,11 @@ namespace move_base {
     }
   }
 
-  bool MoveBase::rampDownVelocity(double& vx, double& vy, double& omegaz)
+  bool MoveBase::rampDownVelocity(double& vx, double& vy, double& omegaz, double slope)
   {
     double v = hypot(vx, vy);
     // TODO: dehardcode brake sample rate
-    double new_v = v - brake_slope_ / BRAKE_SAMPLE_RATE;
+    double new_v = v - slope / BRAKE_SAMPLE_RATE;
     if (new_v < 0.0) {
       vx = 0.0;
       vy = 0.0;
@@ -803,7 +815,12 @@ namespace move_base {
         ROS_DEBUG_NAMED("move_base", "brake thread going to sleep");
         brake_cond_.wait(lock);
       } else {
-        if (rampDownVelocity(current_vx_, current_vy_, current_omegaz_))
+        double brake_slope;
+        {
+          boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+          brake_slope = brake_slope_;
+        }
+        if (rampDownVelocity(current_vx_, current_vy_, current_omegaz_, brake_slope))
           brake_ = false;
         cmd_vel.linear.x = current_vx_;
         cmd_vel.linear.y = current_vy_;
@@ -857,7 +874,12 @@ namespace move_base {
           ac_->cancelGoal();
         }
       }
-      bool done = ac_->waitForResult(ros::Duration(1.0 / controller_frequency_));
+      double controller_frequency;
+      {
+        boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+        controller_frequency = controller_frequency_;
+      }
+      bool done = ac_->waitForResult(ros::Duration(1.0 / controller_frequency));
       actionlib::SimpleClientGoalState state = ac_->getState();
       if (done && state.isDone()) {
         if (state == actionlib::SimpleClientGoalState::SUCCEEDED) {
@@ -935,8 +957,15 @@ namespace move_base {
 
     std::vector<geometry_msgs::PoseStamped> global_plan;
 
-    ros::Rate r(controller_frequency_);
-    if(shutdown_costmaps_){
+    double controller_frequency;
+    bool shutdown_costmaps;
+    {
+      boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+      controller_frequency = controller_frequency_;
+      shutdown_costmaps = shutdown_costmaps_;
+    }
+    ros::Rate r(controller_frequency);
+    if(shutdown_costmaps){
       ROS_DEBUG_NAMED("move_base","Starting up costmaps that were shut down previously");
       planner_costmap_ros_->start();
       controller_costmap_ros_->start();
@@ -953,8 +982,8 @@ namespace move_base {
     {
       if(c_freq_change_)
       {
-        ROS_INFO("Setting controller frequency to %.2f", controller_frequency_);
-        r = ros::Rate(controller_frequency_);
+        ROS_INFO("Setting controller frequency to %.2f", controller_frequency);
+        r = ros::Rate(controller_frequency);
         c_freq_change_ = false;
       }
 
@@ -1035,8 +1064,8 @@ namespace move_base {
 
       r.sleep();
       //make sure to sleep for the remainder of our cycle time
-      if(r.cycleTime() > ros::Duration(1 / controller_frequency_) && state_ == CONTROLLING)
-        ROS_WARN("Control loop missed its desired rate of %.4fHz... the loop actually took %.4f seconds", controller_frequency_, r.cycleTime().toSec());
+      if(r.cycleTime() > ros::Duration(1 / controller_frequency) && state_ == CONTROLLING)
+        ROS_WARN("Control loop missed its desired rate of %.4fHz... the loop actually took %.4f seconds", controller_frequency, r.cycleTime().toSec());
     }
 
     //wake up the planner thread so that it can exit cleanly
@@ -1272,8 +1301,11 @@ namespace move_base {
         }
         else {
           ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid plan.");
-          ros::Time attempt_end = last_valid_control_ + ros::Duration(controller_patience_);
-
+          ros::Time attempt_end;
+          {
+            boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+            attempt_end = last_valid_control_ + ros::Duration(controller_patience_);
+          }
           //check if we've tried to find a valid control for longer than our time limit
           if(ros::Time::now() > attempt_end){
             //we'll move into our obstacle clearing mode
@@ -1493,7 +1525,12 @@ namespace move_base {
     applyBrakes();
 
     //if we shutdown our costmaps when we're deactivated... we'll do that now
-    if(shutdown_costmaps_){
+    bool shutdown_costmaps;
+    {
+      boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
+      shutdown_costmaps = shutdown_costmaps_;
+    }
+    if(shutdown_costmaps){
       ROS_DEBUG_NAMED("move_base","Stopping costmaps");
       planner_costmap_ros_->stop();
       controller_costmap_ros_->stop();

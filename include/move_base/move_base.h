@@ -170,7 +170,7 @@ namespace move_base {
        * @param vy Reference to angular velocity (y component)
        * @return True if the service call succeeds, false otherwise
        */
-      bool rampDownVelocity(double& vx, double& vy, double& omegaz);
+      bool rampDownVelocity(double& vx, double& vy, double& omegaz, double slope);
 
       /**
        * @brief  Reset the state of the move_base action and send a zero velocity command to the base
