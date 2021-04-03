@@ -811,22 +811,26 @@ namespace move_base {
   void MoveBase::brakeThread()
   {
     ros::NodeHandle n;
-    boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
+    double brake_delta;
+    double brake_sample_rate;
     geometry_msgs::Twist cmd_vel;
+    boost::unique_lock<boost::recursive_mutex> lock(brake_mutex_);
 
     while(n.ok()) {
       if (!brake_) {
         ROS_DEBUG_NAMED("move_base", "brake thread going to sleep");
         brake_cond_.wait(lock);
       } else {
-        double brake_delta;
-        double brake_sample_rate;
+        lock.unlock();
+        // check if parameters have changed with lock released to
+        // avoid the deadlock
         {
           boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
           brake_sample_rate = brake_sample_rate_;
           brake_delta = brake_slope_ / brake_sample_rate;
         }
         ros::Rate r(brake_sample_rate);
+        lock.lock();
         if (rampDownVelocity(current_vx_, current_vy_, current_omegaz_, brake_delta))
           brake_ = false;
         cmd_vel.linear.x = current_vx_;
@@ -837,8 +841,8 @@ namespace move_base {
         cmd_vel.angular.z = current_omegaz_;
         ROS_DEBUG_NAMED("move_base",  "brakes active vx=%.2f, vy=%.2f, omega=%.2f",
                         current_vx_, current_vy_, current_omegaz_);
-        vel_pub_.publish(cmd_vel);
         lock.unlock();
+        vel_pub_.publish(cmd_vel);
         r.sleep();
         lock.lock();
       }
