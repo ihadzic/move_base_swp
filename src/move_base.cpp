@@ -146,6 +146,7 @@ namespace move_base {
       brake_sample_rate_ = 20.0;
     }
 
+    private_nh.param("plan_min_step_len", plan_min_step_len_, 0.025);
     private_nh.param("plan_buffer_size", plan_buffer_size_, 150);
     private_nh.param("plan_reload_threshold", plan_reload_threshold_, 100);
 
@@ -269,6 +270,7 @@ namespace move_base {
     brake_slope_ = config.brake_slope;
     brake_sample_rate_ = config.brake_sample_rate;
 
+    plan_min_step_len_ = config.plan_min_step_len;
     plan_buffer_size_ = config.plan_buffer_size;
     plan_reload_threshold_ = config.plan_reload_threshold;
 
@@ -531,6 +533,37 @@ namespace move_base {
     tc_.reset();
   }
 
+  /**
+   * subsample the passed in plan and replace. Enforce a minimum cartesian distance
+   * between waypoints. The first and last points in the original plan are always
+   * preserved. min_step is in meters, and 0 disables the subsampling. */
+  static void mbs_resample_plan(std::vector<geometry_msgs::PoseStamped>& plan, double min_step) {
+    if (min_step > 1e-9 && plan.size() > 2) {
+      //subsample the plan
+      std::vector<geometry_msgs::PoseStamped> new_plan;
+      const double min_dist_sq = (min_step * min_step) - 1e-9;
+      size_t plan_len_minus_1 = plan.size() - 1;
+      new_plan.push_back(plan[0]);
+      geometry_msgs::PoseStamped a = plan[0];
+      for(size_t i = 1; i < plan_len_minus_1; i++) {
+        const geometry_msgs::PoseStamped& b = plan[i];
+        double dx = b.pose.position.x - a.pose.position.x;
+        double dy = b.pose.position.y - a.pose.position.y;
+        double dist_sq = (dx * dx) + (dy * dy);
+        if (dist_sq > min_dist_sq) {
+          new_plan.push_back(b);
+          a = b;
+        }
+      }
+      new_plan.push_back(plan[plan_len_minus_1]);
+      ROS_DEBUG("mbs: subsample global plan from %d to %d steps", (int)plan.size(),
+        (int)new_plan.size());
+      plan.swap(new_plan);
+    } else {
+      ROS_DEBUG("mbs: global plan has %d steps", (int)plan.size());
+    }
+  }
+
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
 
@@ -557,6 +590,9 @@ namespace move_base {
       ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
       return false;
     }
+
+    // reduce waypoint density
+    mbs_resample_plan(plan, plan_min_step_len_);
 
     return true;
   }

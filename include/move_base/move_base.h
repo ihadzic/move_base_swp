@@ -309,6 +309,7 @@ namespace move_base {
       std::vector<int>* controller_waypoint_indices_;
       int closest_plan_waypoint_index_;
       int pursued_plan_waypoint_index_;
+      double plan_min_step_len_;
       int plan_buffer_size_;
       int plan_reload_threshold_;
 
