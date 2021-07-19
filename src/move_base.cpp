@@ -47,6 +47,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #define AC_TIMEOUT .5
+#define HB_TIMEOUT 1.0
 #define EPSILON 0.01
 
 namespace move_base {
@@ -328,6 +329,18 @@ namespace move_base {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
     handbrake_requested_ = brake->data;
     last_handbrake_msg_ = ros::Time::now();
+  }
+
+  // evaluate handbrake, return true if requested and not timed out
+  bool MoveBase::handbrakeEngaged(void)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    if (!handbrake_requested_) return false;
+    if (ros::Time::now() > last_handbrake_msg_ + ros::Duration(HB_TIMEOUT)) {
+      handbrake_requested_ = false;
+      return false;
+    }
+    return true;
   }
 
   void MoveBase::goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal){

@@ -179,6 +179,12 @@ namespace move_base {
        */
       void resetState();
 
+      /**
+       * @brief Return true if handbrake is requested and not timed out
+       *        false if explicitly disengaged or timed out
+       */
+      bool handbrakeEngaged(void);
+
       void goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal);
       void handbrakeCB(const std_msgs::Bool::ConstPtr& brake);
 
