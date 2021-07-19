@@ -60,6 +60,7 @@ namespace move_base {
     current_vy_(0.0),
     current_omegaz_(0.0),
     brake_(false),
+    handbrake_requested_(false),
     planner_costmap_ros_(NULL), controller_costmap_ros_(NULL),
     bgp_loader_("nav_core", "nav_core::BaseGlobalPlanner"),
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"),
@@ -122,6 +123,7 @@ namespace move_base {
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
     recovery_status_pub_= action_nh.advertise<move_base_msgs::RecoveryStatus>("recovery_status", 1);
+    handbrake_sub_ = action_nh.subscribe<std_msgs::Bool>("handbrake", 1, boost::bind(&MoveBase::handbrakeCB, this, _1));
 
     //we'll provide a mechanism for some people to send goals as PoseStamped messages over a topic
     //they won't get any useful information back about its status, but this is useful for tools
@@ -319,6 +321,13 @@ namespace move_base {
     make_plan_add_unreachable_goal_ = config.make_plan_add_unreachable_goal;
 
     last_config_ = config;
+  }
+
+  void MoveBase::handbrakeCB(const std_msgs::Bool::ConstPtr& brake)
+  {
+    boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    handbrake_requested_ = brake->data;
+    last_handbrake_msg_ = ros::Time::now();
   }
 
   void MoveBase::goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal){

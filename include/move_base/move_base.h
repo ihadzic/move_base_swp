@@ -53,6 +53,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/Pose.h>
+#include <std_msgs/Bool.h>
 #include <nav_msgs/Path.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d.h>
@@ -179,6 +180,7 @@ namespace move_base {
       void resetState();
 
       void goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal);
+      void handbrakeCB(const std_msgs::Bool::ConstPtr& brake);
 
       void planThread();
       void brakeThread();
@@ -285,6 +287,7 @@ namespace move_base {
       double brake_sample_rate_;
       ros::Publisher current_goal_pub_, current_waypoints_pub_, vel_pub_, action_goal_pub_, recovery_status_pub_, snapped_pose_pub_, pursued_plan_pub_;
       ros::Subscriber goal_sub_;
+      ros::Subscriber handbrake_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       bool make_plan_clear_costmap_, make_plan_add_unreachable_goal_;
@@ -292,6 +295,9 @@ namespace move_base {
 
       MoveBaseState state_;
       RecoveryTrigger recovery_trigger_;
+
+      ros::Time last_handbrake_msg_;
+      bool handbrake_requested_;
 
       ros::Time last_valid_plan_, last_valid_control_, last_oscillation_reset_;
       geometry_msgs::PoseStamped oscillation_pose_;
