@@ -1344,53 +1344,55 @@ namespace move_base {
           recovery_trigger_ = OSCILLATION_R;
         }
 
-        {
-         boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
+        if (handbrakeEngaged()) {
+          applyBrakes();
+          state_ = HANDBRAKE;
+        } else {
+          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
 
-        bool plan_ok = true;
-        if (plan_buffer_size_ > 0) {
-          if (updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_)) {
-            // near-term plan needed update, so pass it to the local planner
-            plan_ok = tc_->setPlan(near_term_plan_segment_);
+          bool plan_ok = true;
+          if (plan_buffer_size_ > 0) {
+            if (updateNearTermPlan(closest_plan_waypoint_index_, *controller_plan_, pursued_plan_waypoint_index_, near_term_plan_segment_)) {
+              // near-term plan needed update, so pass it to the local planner
+              plan_ok = tc_->setPlan(near_term_plan_segment_);
+            }
           }
-        }
-        if(plan_ok && tc_->computeVelocityCommands(cmd_vel)){
-          publishPlan(near_term_plan_segment_);
-          ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
-                           cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
-          last_valid_control_ = ros::Time::now();
-          geometry_msgs::PoseStamped snapped_pose = updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
-          snapped_pose_pub_.publish(snapped_pose);
-          pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
-          publishWaypoints(planner_waypoints_);
-          //make sure that we send the velocity command to the base
-          setVelocity(cmd_vel);
-          if(recovery_trigger_ == CONTROLLING_R)
-            recovery_index_ = 0;
-        }
-        else {
-          ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid plan.");
-          ros::Time attempt_end;
-          {
+          if(plan_ok && tc_->computeVelocityCommands(cmd_vel)){
+            publishPlan(near_term_plan_segment_);
+            ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
+                             cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
+            last_valid_control_ = ros::Time::now();
+            geometry_msgs::PoseStamped snapped_pose = updateClosestWaypointIndex(closest_plan_waypoint_index_, *controller_plan_);
+            snapped_pose_pub_.publish(snapped_pose);
+            pruneWaypoints(closest_plan_waypoint_index_, planner_waypoints_, *controller_waypoint_indices_);
+            publishWaypoints(planner_waypoints_);
+            //make sure that we send the velocity command to the base
+            setVelocity(cmd_vel);
+            if(recovery_trigger_ == CONTROLLING_R)
+              recovery_index_ = 0;
+          } else {
+            ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid plan.");
+            ros::Time attempt_end;
+            {
             boost::recursive_mutex::scoped_lock cl(configuration_mutex_);
             attempt_end = last_valid_control_ + ros::Duration(controller_patience_);
+            }
+            //check if we've tried to find a valid control for longer than our time limit
+            if(ros::Time::now() > attempt_end){
+              //we'll move into our obstacle clearing mode
+              applyBrakes();
+              state_ = CLEARING;
+              recovery_trigger_ = CONTROLLING_R;
+            }
+            else{
+              //otherwise, if we can't find a valid control, we'll go back to planning
+              last_valid_plan_ = ros::Time::now();
+              planning_retries_ = 0;
+              state_ = PLANNING;
+              applyBrakes();
+              startPlanner();
+            }
           }
-          //check if we've tried to find a valid control for longer than our time limit
-          if(ros::Time::now() > attempt_end){
-            //we'll move into our obstacle clearing mode
-            applyBrakes();
-            state_ = CLEARING;
-            recovery_trigger_ = CONTROLLING_R;
-          }
-          else{
-            //otherwise, if we can't find a valid control, we'll go back to planning
-            last_valid_plan_ = ros::Time::now();
-            planning_retries_ = 0;
-            state_ = PLANNING;
-            applyBrakes();
-            startPlanner();
-          }
-        }
         }
 
         break;
@@ -1446,6 +1448,12 @@ namespace move_base {
           return true;
         }
         break;
+
+      case HANDBRAKE:
+        if (!handbrakeEngaged())
+          state_ = CONTROLLING;
+        break;
+
       default:
         ROS_ERROR("This case should never be reached, something is wrong, aborting");
         resetState();
