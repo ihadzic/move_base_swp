@@ -3,6 +3,8 @@
 * Software License Agreement (BSD License)
 *
 *  Copyright (c) 2008, Willow Garage, Inc.
+*  Copyright (c) 2021-2022, Nokia
+*
 *  All rights reserved.
 *
 *  Redistribution and use in source and binary forms, with or without
@@ -35,6 +37,7 @@
 * Author: Eitan Marder-Eppstein
 *         Mike Phillips (put the planner in its own thread)
 *********************************************************************/
+
 #include <move_base/move_base.h>
 #include <move_base_msgs/RecoveryStatus.h>
 #include <cmath>
