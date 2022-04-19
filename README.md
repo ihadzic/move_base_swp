@@ -257,7 +257,7 @@ from the global plan (published by the global planner).
 
 ### Handbrake topic
 
-`/move_base/handbrake` ([`std_msgs/Bool`](http://docs.ros.org/en/api/std_msgs/html/msg/Bool.html))
+`/move_base/handbrake` (move_base_swp/Handbrake)
 > Sending `True` to this topic will pull the handbrake stopping the robot
 along its plan. Sending `False` will release the handbrake. The handbrake
 must be renewed every second (or less) by re-sending `True` to the topic.
