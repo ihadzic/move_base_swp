@@ -10,10 +10,8 @@
     </description>
     <author>Eitan Marder-Eppstein</author>
     <author>contradict@gmail.com</author>
+    <author email="ilija.hadzic@nokia-bell-labs.com">Ilija Hadzic</author>
     <maintainer email="ilija.hadzic@nokia-bell-labs.com">Ilija Hadzic</maintainer>
-    <maintainer email="davidvlu@gmail.com">David V. Lu!!</maintainer>
-    <maintainer email="mfergs7@gmail.com">Michael Ferguson</maintainer>
-    <maintainer email="ahoy@fetchrobotics.com">Aaron Hoy</maintainer>
     <license>BSD</license>
     <url>http://wiki.ros.org/move_base</url>
 
