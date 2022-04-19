@@ -36,6 +36,11 @@ add_action_files(
     MoveBaseSWP.action
 )
 
+add_message_files(
+  FILES
+  Handbrake.msg
+)
+
 generate_messages(
   DEPENDENCIES
     actionlib_msgs
@@ -73,6 +78,7 @@ target_link_libraries(move_base_swp
     ${catkin_LIBRARIES}
     )
 add_dependencies(move_base_swp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_base_swp move_base_swp_generate_messages_cpp)
 
 add_executable(move_base_swp_node
   src/move_base_node.cpp

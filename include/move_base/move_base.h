@@ -66,6 +66,8 @@
 #include <dynamic_reconfigure/server.h>
 #include "move_base_swp/MoveBaseConfig.h"
 
+#include <move_base_swp/Handbrake.h>
+
 namespace move_base {
   //typedefs to help us out with the action server and client so that we
   // don't have to type so much
@@ -188,7 +190,7 @@ namespace move_base {
       bool handbrakeEngaged(void);
 
       void goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal);
-      void handbrakeCB(const std_msgs::Bool::ConstPtr& brake);
+      void handbrakeCB(const move_base_swp::Handbrake::ConstPtr& brake);
 
       void planThread();
       void brakeThread();

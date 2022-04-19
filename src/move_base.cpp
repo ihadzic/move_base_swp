@@ -127,7 +127,7 @@ namespace move_base {
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
     recovery_status_pub_= action_nh.advertise<move_base_msgs::RecoveryStatus>("recovery_status", 1);
-    handbrake_sub_ = action_nh.subscribe<std_msgs::Bool>("handbrake", 1, boost::bind(&MoveBase::handbrakeCB, this, _1));
+    handbrake_sub_ = action_nh.subscribe<move_base_swp::Handbrake>("handbrake", 1, boost::bind(&MoveBase::handbrakeCB, this, _1));
 
     //we'll provide a mechanism for some people to send goals as PoseStamped messages over a topic
     //they won't get any useful information back about its status, but this is useful for tools
@@ -327,7 +327,7 @@ namespace move_base {
     last_config_ = config;
   }
 
-  void MoveBase::handbrakeCB(const std_msgs::Bool::ConstPtr& brake)
+  void MoveBase::handbrakeCB(const move_base_swp::Handbrake::ConstPtr& brake)
   {
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
     handbrake_requested_ = brake->data;
