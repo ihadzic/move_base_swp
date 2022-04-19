@@ -266,3 +266,82 @@ disappearing. Note that this is not a safety brake (a safety brake would
 require an inverse logic that stops the robot if not renewed). This
 handbrake is meant to be used as part of the robot navigation strategy
 (e.g. stopping to yield to another robot).
+
+
+## Parameters
+
+`move_base_swp` introduces several new parameters that control the behavior
+of the navigation state machine. All parameters are dynamic and can be
+changed at runtime with immediate effect or passed at node launch time.
+This section describes the available parameters. All parameters that are
+available in the [original `move_base`](http://wiki.ros.org/move_base)
+node are available in `move_base_swp` with the same function. Their description
+is not repeated here.
+
+`~brake_slope` (`float`, default: 0.5)
+>This parameter determines the deceleration rate (in m/s^2) that the
+robot will use when braking. Note that naturally slowing down when
+approaching the goal is not considered braking. Braking occurs when the
+goal is canceled, or preempted, or when the handbrake is pulled. Setting
+this parameter to a maximum value of 1000 (de-facto infinity) will
+effectively result in the original `move_base` behavior which is
+to stop immediately.
+
+`~brake_sample_rate` (`float, default: 20)
+>Rate (in Hz) at which to generate velocity vectors when braking.
+This rate is used only when braking. During normal operation the rate
+specified by `controller_frequency` is used as the sampling rate.
+
+`~plan_buffer_size` (`int`, default: 150)
+>The number of waypoints to keep loaded into the local planner when using
+[Windowed global plan](#windowed-global-plan). Setting this parameter
+to zero will tun off this feature, effectively resulting in the original
+`move_base` behavior.
+
+`~plan_reload_threshold` (`int`, default: 100)
+> The low-watermark threshold that determines when to load more waypoints
+into the local planner. Setting this parameter to a value that is greater
+than or equal to the value of `~plan_buffer_size` will result in feeding
+waypoints continuously, which will result in least corner-cutting by the
+local planner, but may have performance implications. Setting
+this value to zero may result in choppy motion because the state machine
+will wait until the local planner exhausts all waypoints before supplying
+the new set.
+
+`~plan_min_step_len` (`float`, default: 0.025)
+> This parameter ensures that the length of the plan buffer roughly results
+in the same covered distance for different map resolution. Namely, some
+global planner generate the waypoints whose resolution matches the
+map resolution. For example, 100 waypoints in the map whose resolution
+is 0.01 m/pixel would result in 10x shorter distance than in the map
+whose resolution is 0.1 m/pixel. Typically, such a fine resolution is not
+necessary because the local planner can successfully deal with waypoints
+that are much further apart. To deal with this problem `~plan_min_step_len`
+parameter effectively downsamples the global plan such that the Euclidean
+distance between plan waypoints is greater or equal to the one
+specified by this parameter.
+
+## Usage
+
+To use the `move_base_swp` node clone this repository into your catkin
+workspace and build it with `catkin_make`.
+Make sure that you have the ROS Navigation package installed
+and configure it to use the `move_base` normally. Make sure that works before
+cutting over to `move_base_swp`. Next, add additional parameters
+under `move_base` namespace in the same way you would set any
+other `move_base` parameter (either in your `.launch` file or in your
+parameter `yaml` file). If you don't add new parameters, default
+values will be used which are fine to start with.
+
+Next, modify your `launch` file for `move_base` and set the node type to
+`move_base_swp`. Start the `move_base` as you would normally start
+and your navigation system will run with `move_base_swp`. The relevant line
+in the `.launch` file should look like this:
+
+```
+<node pkg="move_base_swp" type="move_base_swp" name="move_base" output="screen">
+```
+
+Once the node starts up, you should see new topics and the new `actionlib`
+interface. Also, if you bring up `rqt_reconfig` tool, you should see
+the new parameters in the `move_base` section.
